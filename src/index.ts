@@ -2,6 +2,7 @@ import { select, input } from '@inquirer/prompts';
 import { DailyTransplantCrawler } from './services/crawlerService.js';
 import { generateInitialDraft, condensePost } from './services/aiService.js';
 import { publishThreadToBluesky } from './services/socialService.js';
+import { shortenUrl } from './services/urlService.js';
 
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
@@ -29,9 +30,13 @@ async function runSocialAgent() {
         const articleData = await crawler.crawlArticle(randomArticleUrl);
         console.log(`📰 Scraped: "${articleData.title}"`);
 
+        // Shorten the URL before passing it to the AI!
+        console.log('🔗 Shortening article URL...');
+        const finalUrl = await shortenUrl(articleData.url);
+
         // 2. AI DRAFTING
         console.log('🧠 Generating initial drafts...');
-        const posts = await generateInitialDraft(articleData.title, articleData.excerpt, articleData.url);
+        const posts = await generateInitialDraft(articleData.title, articleData.excerpt, finalUrl);
 
         // 3. UI/CLI LOOP
         let isApproved = false;
@@ -51,6 +56,7 @@ async function runSocialAgent() {
 
             const choices = [
                 { name: allValid ? '🚀 Publish to Bluesky' : '🔧 Auto-Fix with Gemini', value: 'PROCEED' },
+                { name: '🔄 Regenerate Entire Thread', value: 'REGENERATE' },
                 ...posts.map((_, i) => ({ name: `✏️ Edit Post ${i + 1}`, value: `EDIT_${i}` })),
                 { name: '🛑 Cancel', value: 'CANCEL' }
             ];
@@ -75,6 +81,21 @@ async function runSocialAgent() {
                         const newText = await condensePost(originalPost, instruction);
                         if (newText) posts[invalidIndex] = newText;
                     }
+                }
+            } else if (choice === 'REGENERATE') {
+                console.log('\n🧠 Asking Gemini for a completely new draft...');
+
+                try {
+                    // Fetch a fresh set of posts using the exact same article data
+                    const newDrafts = await generateInitialDraft(articleData.title, articleData.excerpt, finalUrl);
+
+                    // Replace the current posts array with the new drafts
+                    posts.length = 0;
+                    posts.push(...newDrafts);
+
+                    console.log(`\n${GREEN}✨ Fresh drafts generated successfully!${RESET}`);
+                } catch (error) {
+                    console.error('❌ Failed to regenerate drafts:', error);
                 }
             } else if (choice.startsWith('EDIT_')) {
                 const splitArray = choice.split('_');
