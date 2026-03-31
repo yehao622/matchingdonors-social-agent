@@ -78,7 +78,12 @@ app.post('/api/draft', async (req, res) => {
 // ==========================================
 app.post('/api/publish', async (req, res) => {
     try {
-        const { posts } = req.body;
+        let { posts } = req.body;
+
+        // Clean the array on the backend side just to be safe
+        if (Array.isArray(posts)) {
+            posts = posts.filter((p: string) => typeof p === 'string' && p.trim().length > 0);
+        }
 
         if (!posts || !Array.isArray(posts) || posts.length === 0) {
             return res.status(400).json({ error: 'No posts provided.' });

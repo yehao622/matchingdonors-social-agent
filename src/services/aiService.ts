@@ -11,7 +11,7 @@ export async function generateInitialDraft(title: string, summary: string, url: 
         Turn the following medical news into an engaging, empathetic 2-part social media thread.
 
         CRITICAL RULES:
-        1. EACH individual post MUST be strictly LESS THAN 200 characters.
+        1. EACH individual post MUST be strictly LESS THAN 250 characters.
         2. Include relevant emojis and hashtags like #OrganDonation or #TransplantNews. Also, remember
         to add '#MatchingDonors Inc' with embedded link: 'https://matchingdonors.com/life'
         3. The last post must include a call to action with this link: ${url}

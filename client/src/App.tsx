@@ -50,8 +50,42 @@ export default function App() {
     }
   };
 
+  const handleRegenerate = async () => {
+    if (!article) return;
+
+    setIsLoading(true);
+    setStatus('Gemini is drafting new posts...');
+    setPosts([]);
+
+    try {
+      const draftRes = await fetch('http://localhost:3001/api/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'INITIAL',
+          title: article.title,
+          excerpt: article.excerpt,
+          url: article.url
+        })
+      });
+
+      const draftData = await draftRes.json();
+      setPosts(draftData.posts || []);
+      setStatus('✅ Fresh drafts generated!');
+    } catch (error) {
+      console.error(error);
+      setStatus('❌ Error regenerating content.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Publish to Bluesky
   const handlePublish = async () => {
+    // Filter out any empty posts (ignoring spaces)
+    const validPosts = posts.filter(p => p.trim().length > 0);
+    if (validPosts.length === 0) return;
+
     setIsLoading(true);
     setStatus('Publishing to Bluesky...');
 
@@ -69,7 +103,7 @@ export default function App() {
         setStatus('❌ Failed to publish.');
       }
     } catch (error) {
-      setStatus('❌ Error connecting to server.');
+      setStatus('❌ Error connecting to server: ' + error);
     } finally {
       setIsLoading(false);
     }
@@ -200,19 +234,36 @@ export default function App() {
               ))}
             </div>
 
+            {/* Add Another Post Button */}
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setPosts([...posts, ''])}
+                className="px-5 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
+              >
+                ➕ Add another post to thread
+              </button>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex gap-4 pt-4 border-t border-gray-100">
               <button
                 onClick={handlePublish}
-                disabled={isLoading || posts.some(p => p.length > 300)}
+                disabled={
+                  isLoading ||
+                  posts.filter(p => p.trim().length > 0).length === 0 ||
+                  posts.some(p => p.length > 300)
+                }
                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 Publish to Bluesky
               </button>
 
               <button
-                onClick={handleGenerate}
-                disabled={isLoading}
+                onClick={handleRegenerate}
+                disabled={
+                  isLoading ||
+                  !article
+                }
                 className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full font-semibold transition-all"
               >
                 Regenerate
