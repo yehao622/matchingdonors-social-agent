@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from './apiClient';
 
 // Define our types based on the backend responses
 interface Article {
@@ -12,36 +13,34 @@ export default function App() {
   const [posts, setPosts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [isAutoMode, setIsAutoMode] = useState(false);
 
   // Fetch random article & generate drafts
   const handleGenerate = async () => {
     setIsLoading(true);
     setStatus('Scraping latest article...');
     setPosts([]);
+    setIsAutoMode(false);
 
     try {
       // Scrape
-      const scrapeRes = await fetch('http://localhost:3001/api/scrape');
-      const scrapedData = await scrapeRes.json();
+      const scrapedData = await api.scrape();
       setArticle(scrapedData);
 
       setStatus('Gemini is drafting posts...');
-
-      // Draft
-      const draftRes = await fetch('http://localhost:3001/api/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'INITIAL',
-          title: scrapedData.title,
-          excerpt: scrapedData.excerpt,
-          url: scrapedData.url
-        })
+      const draftData = await api.draft({
+        action: 'INITIAL',
+        title: scrapedData.title,
+        excerpt: scrapedData.excerpt,
+        url: scrapedData.url
       });
 
-      const draftData = await draftRes.json();
       setPosts(draftData.posts || []);
       setStatus('');
+
+      setTimeLeft(30);
+      setIsAutoMode(true);
     } catch (error) {
       console.error(error);
       setStatus('Error generating content. Is the backend running?');
@@ -56,22 +55,21 @@ export default function App() {
     setIsLoading(true);
     setStatus('Gemini is drafting new posts...');
     setPosts([]);
+    setIsAutoMode(false);
 
     try {
-      const draftRes = await fetch('http://localhost:3001/api/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'INITIAL',
-          title: article.title,
-          excerpt: article.excerpt,
-          url: article.url
-        })
+      const draftData = await api.draft({
+        action: 'INITIAL',
+        title: article.title,
+        excerpt: article.excerpt,
+        url: article.url
       });
 
-      const draftData = await draftRes.json();
       setPosts(draftData.posts || []);
       setStatus('✅ Fresh drafts generated!');
+
+      setTimeLeft(30);
+      setIsAutoMode(true);
     } catch (error) {
       console.error(error);
       setStatus('❌ Error regenerating content.');
@@ -82,6 +80,8 @@ export default function App() {
 
   // Publish to Bluesky
   const handlePublish = async () => {
+    cancelAutoMode();
+
     // Filter out any empty posts (ignoring spaces)
     const validPosts = posts.filter(p => p.trim().length > 0);
     if (validPosts.length === 0) return;
@@ -90,18 +90,9 @@ export default function App() {
     setStatus('Publishing to Bluesky...');
 
     try {
-      const res = await fetch('http://localhost:3001/api/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posts })
-      });
-
-      if (res.ok) {
-        setStatus('✅ Successfully published!');
-        setPosts([]); // Clear posts on success
-      } else {
-        setStatus('❌ Failed to publish.');
-      }
+      await api.publish(validPosts);
+      setStatus('✅ Successfully published!');
+      setPosts([]);
     } catch (error) {
       setStatus('❌ Error connecting to server: ' + error);
     } finally {
@@ -111,6 +102,7 @@ export default function App() {
 
   // Cancel and clear everything
   const handleCancel = () => {
+    cancelAutoMode();
     setPosts([]);
     setArticle(null);
     setStatus('');
@@ -118,11 +110,11 @@ export default function App() {
 
   // Auto-Fix a specific long post
   const handleCondense = async (index: number) => {
+    cancelAutoMode();
     const originalPost = posts[index];
 
     // Pop up a native browser prompt for instructions (just like our CLI did!)
     const userNote = window.prompt(`Instructions for Gemini to fix Post ${index + 1} (leave blank for default):`);
-
     // If the user clicks "Cancel" on the prompt, do nothing
     if (userNote === null) return;
 
@@ -132,17 +124,11 @@ export default function App() {
     setStatus(`Condensing Post ${index + 1}...`);
 
     try {
-      const res = await fetch('http://localhost:3001/api/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CONDENSE',
-          originalPost: originalPost,
-          instruction: instruction
-        })
+      const data = await api.draft({
+        action: 'CONDENSE',
+        originalPost: originalPost,
+        instruction: instruction
       });
-
-      const data = await res.json();
 
       if (data.text) {
         const newPosts = [...posts];
@@ -160,10 +146,74 @@ export default function App() {
     }
   };
 
+  const cancelAutoMode = () => {
+    if (isAutoMode) {
+      setIsAutoMode(false);
+      setStatus('✋ Manual mode engaged. Auto-publish cancelled.');
+    }
+  };
+
+  // The fully automated publish sequence (Runs when timer hits 0)
+  const executeAutoPublish = async () => {
+    setIsAutoMode(false);
+    setIsLoading(true);
+    const currentPosts = [...posts];
+
+    // Auto-fix any long posts
+    for (let i = 0; i < currentPosts.length; i++) {
+      if (currentPosts[i].length > 300) {
+        setStatus(`⚙️ Auto-publishing: Condensing Post ${i + 1}...`);
+        try {
+          const data = await api.draft({
+            action: 'CONDENSE',
+            originalPost: currentPosts[i],
+            instruction: 'Make it more concise under 200 chars.'
+          });
+
+          if (data.text)
+            currentPosts[i] = data.text;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    setPosts(currentPosts);
+
+    // Filter empty posts and Publish
+    const validPosts = currentPosts.filter(p => p.trim().length > 0);
+    if (validPosts.length === 0) {
+      setStatus('❌ Auto-publish aborted: No valid posts.');
+      setIsLoading(false);
+      return;
+    }
+
+    setStatus('🚀 Auto-publishing to Bluesky...');
+    try {
+      await api.publish(validPosts);
+      setStatus('✅ Successfully auto-published!');
+      setPosts([]);
+    } catch (error) {
+      setStatus(`❌ Error connecting to server. ${error}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // The countdown timer hook
+  useEffect(() => {
+    if (!isAutoMode || isLoading) return;
+
+    if (timeLeft > 0) {
+      const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timerId);
+    } else {
+      executeAutoPublish();
+    }
+  }, [timeLeft, isAutoMode, isLoading, posts]);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-
-      {/* The Apple-Style Main Card */}
       <div className="max-w-2xl w-full bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.06)] p-10 transition-all">
 
         {/* Header Section */}
@@ -180,6 +230,24 @@ export default function App() {
         {status && (
           <div className="mb-6 p-4 rounded-xl bg-blue-50 text-blue-700 text-sm font-medium animate-pulse">
             {status}
+          </div>
+        )}
+
+        {/* Ghost Timer UI */}
+        {isAutoMode && (
+          <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-between shadow-sm animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="animate-spin h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full"></div>
+              <p className="text-orange-800 font-medium">
+                Auto-publishing in <span className="font-bold text-lg">{timeLeft}</span> seconds...
+              </p>
+            </div>
+            <button
+              onClick={cancelAutoMode}
+              className="text-sm font-bold text-orange-600 hover:text-orange-800 bg-orange-100 hover:bg-orange-200 px-3 py-1 rounded-full transition-colors cursor-pointer"
+            >
+              Stop Timer
+            </button>
           </div>
         )}
 
@@ -210,6 +278,7 @@ export default function App() {
                       {post.length}/300
                     </span>
                     <textarea
+                      onFocus={cancelAutoMode} // Stop timer if human types!
                       className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-5 pr-20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
                       rows={4}
                       value={post}
@@ -223,7 +292,10 @@ export default function App() {
 
                   {post.length > 300 && (
                     <button
-                      onClick={() => handleCondense(index)}
+                      onClick={() => {
+                        cancelAutoMode();
+                        handleCondense(index);
+                      }}
                       disabled={isLoading}
                       className="self-end text-sm text-blue-600 hover:text-blue-800 font-medium px-2 py-1 transition-all flex items-center gap-1 cursor-pointer"
                     >
@@ -237,7 +309,10 @@ export default function App() {
             {/* Add Another Post Button */}
             <div className="flex justify-center pt-2">
               <button
-                onClick={() => setPosts([...posts, ''])}
+                onClick={() => {
+                  cancelAutoMode();
+                  setPosts([...posts, '']);
+                }}
                 className="px-5 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
               >
                 ➕ Add another post to thread

@@ -2,7 +2,7 @@
 import express from 'express';
 import cors from 'cors';
 
-import { DailyTransplantCrawler } from './services/crawlerService.js';
+import { CrawlerManager } from './services/CrawlerManager.js';
 import { generateInitialDraft, condensePost } from './services/aiService.js';
 import { publishThreadToBluesky } from './services/socialService.js';
 import { shortenUrl } from './services/urlService.js';
@@ -19,21 +19,8 @@ app.use(express.json()); // Allows to read JSON bodies in POST requests
 // ==========================================
 app.get('/api/scrape', async (req, res) => {
     try {
-        const crawler = new DailyTransplantCrawler();
-        const links = await crawler.crawlIndex();
-
-        if (links.length === 0) {
-            return res.status(404).json({ error: 'No articles found.' });
-        }
-
-        const randomIndex = Math.floor(Math.random() * links.length);
-        const randomArticleUrl = links[randomIndex];
-
-        if (!randomArticleUrl) {
-            return res.status(500).json({ error: 'Failed to select article.' });
-        }
-
-        const articleData = await crawler.crawlArticle(randomArticleUrl);
+        const manager = new CrawlerManager();
+        const articleData = await manager.fetchRandomArticleFromAnySource();
 
         // Return the scraped data to the frontend
         res.json({

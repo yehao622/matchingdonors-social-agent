@@ -5,6 +5,14 @@ dotenv.config();
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
+async function askGemini(prompt: string): Promise<string> {
+    const response = await genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return response.text || '';
+}
+
 export async function generateInitialDraft(title: string, summary: string, url: string): Promise<string[]> {
     const prompt = `
         You are the social media manager for MatchingDonors, a 501(c)(3) non-profit.
@@ -22,14 +30,17 @@ export async function generateInitialDraft(title: string, summary: string, url: 
         OUTPUT STRICTLY AS A JSON ARRAY OF STRINGS. No markdown, no extra text.
     `;
 
-    const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
+    // const response = await genAI.models.generateContent({
+    //     model: 'gemini-2.5-flash',
+    //     contents: prompt,
+    // });
 
-    let rawText = response.text || '[]';
-    rawText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    return JSON.parse(rawText);
+    // let rawText = response.text || '[]';
+    // rawText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+    let text = await askGemini(prompt);
+    text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+    return JSON.parse(text);
 }
 
 export async function condensePost(originalPost: string, userNote: string): Promise<string | null> {
@@ -43,10 +54,12 @@ export async function condensePost(originalPost: string, userNote: string): Prom
         OUTPUT ONLY THE NEW TEXT STRING. No markdown, no quotes, no extra text.
     `;
 
-    const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
+    // const response = await genAI.models.generateContent({
+    //     model: 'gemini-2.5-flash',
+    //     contents: prompt,
+    // });
 
-    return response.text ? response.text.trim() : null;
+    // return response.text ? response.text.trim() : null;
+    const text = await askGemini(prompt);
+    return text.trim() || null;
 }

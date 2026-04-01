@@ -1,5 +1,5 @@
 import { select, input } from '@inquirer/prompts';
-import { DailyTransplantCrawler } from './services/crawlerService.js';
+import { DailyTransplantCrawler } from './services/crawler/DailyTransplantCrawler.js';
 import { generateInitialDraft, condensePost } from './services/aiService.js';
 import { publishThreadToBluesky } from './services/socialService.js';
 import { shortenUrl } from './services/urlService.js';
@@ -16,18 +16,8 @@ async function runSocialAgent() {
         // 1. DATA FETCHING
         console.log('🕷️ Crawling for the latest article...');
         const crawler = new DailyTransplantCrawler();
-        const links = await crawler.crawlIndex();
-        if (links.length === 0) throw new Error('No articles found.');
 
-        //  Pick a random index between 0 and the total number of links
-        const randomIndex = Math.floor(Math.random() * links.length);
-        const randomArticleUrl = links[randomIndex];
-
-        if (!randomArticleUrl) {
-            throw new Error('Failed to select a random article.');
-        }
-
-        const articleData = await crawler.crawlArticle(randomArticleUrl);
+        const articleData = await crawler.crawlRandomArticle();
         console.log(`📰 Scraped: "${articleData.title}"`);
 
         // Shorten the URL before passing it to the AI!
