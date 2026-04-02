@@ -6,7 +6,17 @@ interface Article {
   title: string;
   excerpt: string;
   url: string;
+  sourceName: string;
 }
+
+// Hardcoded list of our available crawlers for the Grid UI
+const CRAWLER_SOURCES = [
+  { id: 'DailyTransplantCrawler', name: 'US Transplant News' },
+  { id: 'IrishTransplantCrawler', name: 'Irish Transplant News' },
+  { id: 'DailyDiabetesCrawler', name: 'Daily Diabetes' },
+  { id: 'PubMedCrawler', name: 'PubMed Academic' },
+  { id: 'PlosCrawler', name: 'PLOS Journals' }
+];
 
 export default function App() {
   const [article, setArticle] = useState<Article | null>(null);
@@ -15,6 +25,8 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [timeLeft, setTimeLeft] = useState(30);
   const [isAutoMode, setIsAutoMode] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [globalStatus, setGlobalStatus] = useState('Initializing connection...');
 
   // Fetch random article & generate drafts
   const handleGenerate = async () => {
@@ -90,7 +102,7 @@ export default function App() {
     setStatus('Publishing to Bluesky...');
 
     try {
-      await api.publish(validPosts);
+      await api.publish(validPosts, article?.sourceName, article?.url);
       setStatus('✅ Successfully published!');
       setPosts([]);
     } catch (error) {
@@ -190,7 +202,7 @@ export default function App() {
 
     setStatus('🚀 Auto-publishing to Bluesky...');
     try {
-      await api.publish(validPosts);
+      await api.publish(validPosts, article?.sourceName, article?.url);
       setStatus('✅ Successfully auto-published!');
       setPosts([]);
     } catch (error) {
@@ -212,148 +224,107 @@ export default function App() {
     }
   }, [timeLeft, isAutoMode, isLoading, posts]);
 
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const data = await api.getStatus();
+        setIsRunning(data.isRunning);
+        setGlobalStatus(data.status);
+      } catch (error) {
+        setGlobalStatus(`⚠️ Disconnected from Backend Server. ${error}`);
+      }
+    };
+
+    // Fetch immediately, then every 5 seconds
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, 5000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Engine Toggle Handlers
+  const toggleEngine = async () => {
+    try {
+      if (isRunning) {
+        await api.stopEngine();
+        setIsRunning(false);
+        setGlobalStatus('Idle (Engine Stopped)');
+      } else {
+        await api.startEngine();
+        setIsRunning(true);
+        setGlobalStatus('Starting up...');
+      }
+    } catch (error) {
+      console.error('Failed to toggle engine', error);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="max-w-2xl w-full bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.06)] p-10 transition-all">
+    <div className="min-h-screen bg-[#f9fafb] p-8 font-sans">
+      <div className="max-w-6xl mx-auto space-y-8">
 
-        {/* Header Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-            Social Agent
-          </h1>
-          <p className="text-gray-500 mt-2">
-            AI-powered medical news distribution.
-          </p>
-        </div>
-
-        {/* Status Indicator */}
-        {status && (
-          <div className="mb-6 p-4 rounded-xl bg-blue-50 text-blue-700 text-sm font-medium animate-pulse">
-            {status}
+        {/* Master Control Header */}
+        <div className="bg-white rounded-[2rem] shadow-sm p-8 flex flex-col md:flex-row items-center justify-between border border-gray-100">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              Social Agent <span className="text-blue-600">Core</span>
+            </h1>
+            <p className="text-gray-500 mt-2 font-medium">
+              Autonomous AI News Pipeline
+            </p>
           </div>
-        )}
 
-        {/* Ghost Timer UI */}
-        {isAutoMode && (
-          <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-between shadow-sm animate-pulse">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full"></div>
-              <p className="text-orange-800 font-medium">
-                Auto-publishing in <span className="font-bold text-lg">{timeLeft}</span> seconds...
+          <div className="mt-6 md:mt-0 flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">System Status</p>
+              <p className={`font-medium ${isRunning ? 'text-green-600 animate-pulse' : 'text-gray-500'}`}>
+                {globalStatus}
               </p>
             </div>
+
+            {/* The Giant Apple-Style Toggle Switch */}
             <button
-              onClick={cancelAutoMode}
-              className="text-sm font-bold text-orange-600 hover:text-orange-800 bg-orange-100 hover:bg-orange-200 px-3 py-1 rounded-full transition-colors cursor-pointer"
+              onClick={toggleEngine}
+              className={`relative inline-flex h-14 w-28 items-center rounded-full transition-colors duration-300 focus:outline-none shadow-inner ${isRunning ? 'bg-green-500' : 'bg-gray-300'}`}
             >
-              Stop Timer
+              <span className={`inline-block h-10 w-10 transform rounded-full bg-white transition-transform duration-300 shadow-md ${isRunning ? 'translate-x-16' : 'translate-x-2'}`} />
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Content Section */}
-        {posts.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-2xl border border-gray-100">
-            <p className="text-gray-400 mb-6">No drafts generated yet.</p>
-            <button
-              onClick={handleGenerate}
-              disabled={isLoading}
-              className="px-8 py-3 bg-black hover:bg-gray-800 text-white rounded-full font-semibold transition-all disabled:opacity-50"
-            >
-              Fetch & Generate Draft
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Source Article</h3>
-              <p className="font-medium text-gray-800">{article?.title}</p>
-            </div>
+        {/* Phase 4: The Crawler Grid UI */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {CRAWLER_SOURCES.map((source) => {
+            // Check if the backend is currently talking about THIS specific crawler
+            const isActive = isRunning && globalStatus.includes(source.id);
 
-            <div className="space-y-4">
-              {posts.map((post, index) => (
-                <div key={index} className="flex flex-col gap-2">
-                  <div className="relative">
-                    <span className={`absolute top-4 right-4 text-xs font-bold px-2 py-1 rounded-full ${post.length > 300 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                      {post.length}/300
-                    </span>
-                    <textarea
-                      onFocus={cancelAutoMode} // Stop timer if human types!
-                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-5 pr-20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-                      rows={4}
-                      value={post}
-                      onChange={(e) => {
-                        const newPosts = [...posts];
-                        newPosts[index] = e.target.value;
-                        setPosts(newPosts);
-                      }}
-                    />
-                  </div>
+            return (
+              <div
+                key={source.id}
+                className={`relative bg-white rounded-3xl p-6 transition-all duration-500 border ${!isRunning ? 'opacity-60 grayscale border-gray-100 shadow-sm' :
+                  isActive ? 'border-blue-500 shadow-lg scale-[1.02] ring-4 ring-blue-50' :
+                    'border-gray-100 shadow-sm opacity-90'
+                  }`}
+              >
+                {/* Active Indicator Pulse */}
+                {isActive && (
+                  <span className="absolute top-6 right-6 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                  </span>
+                )}
 
-                  {post.length > 300 && (
-                    <button
-                      onClick={() => {
-                        cancelAutoMode();
-                        handleCondense(index);
-                      }}
-                      disabled={isLoading}
-                      className="self-end text-sm text-blue-600 hover:text-blue-800 font-medium px-2 py-1 transition-all flex items-center gap-1 cursor-pointer"
-                    >
-                      ✨ Auto-Fix with Gemini
-                    </button>
-                  )}
+                <h3 className="text-lg font-bold text-gray-900">{source.name}</h3>
+                <p className="text-xs text-gray-400 font-mono mt-1 mb-6">{source.id}</p>
+
+                <div className="bg-gray-50 rounded-xl p-4 min-h-[80px] flex items-center justify-center border border-gray-100/50">
+                  <p className={`text-sm text-center font-medium ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {!isRunning ? 'Offline' : isActive ? 'Crawling & Generating Drafts...' : 'Waiting for next cycle...'}
+                  </p>
                 </div>
-              ))}
-            </div>
-
-            {/* Add Another Post Button */}
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={() => {
-                  cancelAutoMode();
-                  setPosts([...posts, '']);
-                }}
-                className="px-5 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
-              >
-                ➕ Add another post to thread
-              </button>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-4 pt-4 border-t border-gray-100">
-              <button
-                onClick={handlePublish}
-                disabled={
-                  isLoading ||
-                  posts.filter(p => p.trim().length > 0).length === 0 ||
-                  posts.some(p => p.length > 300)
-                }
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                Publish to Bluesky
-              </button>
-
-              <button
-                onClick={handleRegenerate}
-                disabled={
-                  isLoading ||
-                  !article
-                }
-                className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full font-semibold transition-all"
-              >
-                Regenerate
-              </button>
-
-              <button
-                onClick={handleCancel}
-                disabled={isLoading}
-                className="px-6 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-full font-semibold transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
 
       </div>
     </div>

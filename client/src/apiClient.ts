@@ -17,13 +17,31 @@ export const api = {
     return res.json();
   },
 
-  async publish(posts: string[]) {
+  async publish(posts: string[], sourceName?: string, url?: string) {
     const res = await fetch(`${BASE_URL}/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posts }),
+      body: JSON.stringify({ posts, sourceName, url }),
     });
     if (!res.ok) throw new Error('Failed to publish');
+    return res.json();
+  },
+
+  async getStatus() {
+    const res = await fetch(`${BASE_URL}/cron/status`);
+    if (!res.ok) throw new Error('Failed to fetch engine status');
+    return res.json();
+  },
+
+  async startEngine() {
+    const res = await fetch(`${BASE_URL}/cron/start`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to start engine');
+    return res.json();
+  },
+
+  async stopEngine() {
+    const res = await fetch(`${BASE_URL}/cron/stop`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to stop engine');
     return res.json();
   }
 };

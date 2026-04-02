@@ -2,10 +2,12 @@
 import express from 'express';
 import cors from 'cors';
 
-import { CrawlerManager } from './services/CrawlerManager.js';
+import { crawlerManager } from './services/CrawlerManager.js';
 import { generateInitialDraft, condensePost } from './services/aiService.js';
 import { publishThreadToBluesky } from './services/socialService.js';
 import { shortenUrl } from './services/urlService.js';
+import { historyService } from './services/HistoryService.js';
+import { cronService } from './services/CronService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001; // Backend runs on 3001, React will run on 3000
@@ -19,14 +21,14 @@ app.use(express.json()); // Allows to read JSON bodies in POST requests
 // ==========================================
 app.get('/api/scrape', async (req, res) => {
     try {
-        const manager = new CrawlerManager();
-        const articleData = await manager.fetchRandomArticleFromAnySource();
+        const articleData = await crawlerManager.fetchOneArticleFromSources();
 
         // Return the scraped data to the frontend
         res.json({
             title: articleData.title,
             excerpt: articleData.excerpt,
-            url: articleData.url
+            url: articleData.url,
+            sourceName: articleData.sourceName
         });
     } catch (error) {
         console.error('Scrape error:', error);
@@ -65,23 +67,48 @@ app.post('/api/draft', async (req, res) => {
 // ==========================================
 app.post('/api/publish', async (req, res) => {
     try {
-        let { posts } = req.body;
+        let { posts, sourceName, url } = req.body;
 
         // Clean the array on the backend side just to be safe
         if (Array.isArray(posts)) {
             posts = posts.filter((p: string) => typeof p === 'string' && p.trim().length > 0);
         }
 
-        if (!posts || !Array.isArray(posts) || posts.length === 0) {
-            return res.status(400).json({ error: 'No posts provided.' });
+        if (!posts || posts.length === 0) {
+            return res.status(400).json({ error: 'No valid posts provided.' });
         }
 
         await publishThreadToBluesky(posts);
+
+        if (url && sourceName) {
+            historyService.markArticleCrawled(sourceName, url);
+        }
+
         res.json({ success: true, message: 'Successfully published to Bluesky!' });
     } catch (error) {
         console.error('Publish error:', error);
         res.status(500).json({ error: 'Failed to publish to Bluesky.' });
     }
+});
+
+// ==========================================
+// ENDPOINT 4: CRON ENGINE CONTROLS
+// ==========================================
+app.get('/api/cron/status', (req, res) => {
+    res.json({
+        isRunning: cronService.isRunning,
+        status: cronService.currentStatus
+    });
+});
+
+app.post('/api/cron/start', (req, res) => {
+    cronService.start();
+    res.json({ success: true, message: 'Cron engine started.' });
+});
+
+app.post('/api/cron/stop', (req, res) => {
+    cronService.stop();
+    res.json({ success: true, message: 'Cron engine stopped.' });
 });
 
 // Start the server
