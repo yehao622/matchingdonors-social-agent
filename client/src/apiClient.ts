@@ -43,5 +43,11 @@ export const api = {
     const res = await fetch(`${BASE_URL}/cron/stop`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to stop engine');
     return res.json();
+  },
+
+  async getHistory() {
+    const res = await fetch(`${BASE_URL}/history`);
+    if (!res.ok) throw new Error('Failed to fetch history');
+    return res.json();
   }
 };

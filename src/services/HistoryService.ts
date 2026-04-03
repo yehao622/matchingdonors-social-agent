@@ -45,6 +45,17 @@ export class HistoryService {
             console.error(`Failed to save to history: ${url}`, error);
         }
     }
+
+    public getRecentHistory(limit: number = 50) {
+        try {
+            // We order by timestamp descending so the newest posts are at the top
+            const stmt = this.db.prepare('SELECT * FROM published_articles ORDER BY timestamp DESC LIMIT ?');
+            return stmt.all(limit);
+        } catch (error) {
+            console.error('Failed to fetch history', error);
+            return [];
+        }
+    }
 }
 
 export const historyService = new HistoryService();

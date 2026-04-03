@@ -3,6 +3,7 @@ import { IrishTransplantCrawler } from './crawler/IrishTransplantCrawler.js';
 import { DailyDiabetesCrawler } from './crawler/DailyDiabetesCrawler.js';
 import { PubMedCrawler } from './crawler/PubMedCrawler.js';
 import { PlosCrawler } from './crawler/PlosCrawler.js';
+import { OptnCrawler } from './crawler/OptnCrawler.js';
 import { historyService } from './HistoryService.js';
 
 export class CrawlerManager {
@@ -12,6 +13,7 @@ export class CrawlerManager {
     constructor() {
         // Register all available sources here!
         this.crawlers = [
+            new OptnCrawler(),
             new DailyTransplantCrawler(),
             new IrishTransplantCrawler(),
             new DailyDiabetesCrawler(),
@@ -47,8 +49,8 @@ export class CrawlerManager {
                     sourceName: selectedCrawler.constructor.name
                 };
 
-            } catch (error) {
-                console.error(`⚠️ ${selectedCrawler.constructor.name} failed. Attempting fallback...`);
+            } catch (error: any) {
+                console.error(`⚠️ ${selectedCrawler.constructor.name} failed. Reason: ${error.message}`);
             }
         }
 

@@ -111,6 +111,19 @@ app.post('/api/cron/stop', (req, res) => {
     res.json({ success: true, message: 'Cron engine stopped.' });
 });
 
+// ==========================================
+// ENDPOINT 5: HISTORY LOG
+// ==========================================
+app.get('/api/history', (req, res) => {
+    try {
+        const records = historyService.getRecentHistory();
+        res.json(records);
+    } catch (error) {
+        console.error('History fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch history.' });
+    }
+});
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`🌐 API Server is running on http://localhost:${PORT}`);

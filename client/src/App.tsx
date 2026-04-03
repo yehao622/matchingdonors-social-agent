@@ -11,6 +11,7 @@ interface Article {
 
 // Hardcoded list of our available crawlers for the Grid UI
 const CRAWLER_SOURCES = [
+  { id: 'OptnCrawler', name: 'OPTN Gov Network' },
   { id: 'DailyTransplantCrawler', name: 'US Transplant News' },
   { id: 'IrishTransplantCrawler', name: 'Irish Transplant News' },
   { id: 'DailyDiabetesCrawler', name: 'Daily Diabetes' },
@@ -27,6 +28,7 @@ export default function App() {
   const [isAutoMode, setIsAutoMode] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [globalStatus, setGlobalStatus] = useState('Initializing connection...');
+  const [history, setHistory] = useState<any[]>([]);
 
   // Fetch random article & generate drafts
   const handleGenerate = async () => {
@@ -230,6 +232,8 @@ export default function App() {
         const data = await api.getStatus();
         setIsRunning(data.isRunning);
         setGlobalStatus(data.status);
+        const historyData = await api.getHistory();
+        setHistory(historyData);
       } catch (error) {
         setGlobalStatus(`⚠️ Disconnected from Backend Server. ${error}`);
       }
@@ -326,6 +330,48 @@ export default function App() {
           })}
         </div>
 
+      </div>
+
+      {/* Phase B (Part 1): The History Log */}
+      <div className="mt-12 bg-white rounded-[2rem] shadow-sm p-8 border border-gray-100">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Recent Publications Log</h2>
+
+        {history.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            No articles have been published yet. Turn on the engine!
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="py-4 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Timestamp</th>
+                  <th className="py-4 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Source</th>
+                  <th className="py-4 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Original URL</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {history.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      {new Date(row.timestamp.replace(' ', 'T') + 'Z').toLocaleString()}
+                    </td>
+                    <td className="py-4 px-4 text-sm text-gray-500">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {row.source_name}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-sm text-gray-400 truncate max-w-md">
+                      <a href={row.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
+                        {row.url}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
