@@ -32,6 +32,21 @@ class CronService {
         console.log('🛑 Cron engine stopped!');
     }
 
+    // Pauses the backend, but instantly aborts if the human stops the engine
+    private async smartDelay(seconds: number, countdownMessage?: string): Promise<boolean> {
+        for (let i = seconds; i > 0; i--) {
+            // If human clicked "Take Control", this.isRunning becomes false and we abort!
+            if (!this.isRunning) return false;
+
+            if (countdownMessage) {
+                this.currentStatus = `${countdownMessage} ${i}s...`;
+            }
+            // Wait exactly 1 second
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        return this.isRunning;
+    }
+
     // This is the fully automated pipeline (No humans required!)
     private async runWorkflow() {
         this.currentStatus = 'Crawling for an article...';
@@ -40,11 +55,16 @@ class CronService {
             // 1. Scrape (Round-Robin skips duplicates automatically!)
             const article = await crawlerManager.fetchOneArticleFromSources();
 
-            // 2. Shorten URL
+            // Tell the UI we succeeded, and hold for 4 seconds so the user can see it
+            this.currentStatus = `✅ Article found! Syncing UI...`;
+            const proceed1 = await this.smartDelay(4);
+            if (!proceed1) return; // Abort if human intervened!
+
+            // Shorten URL
             this.currentStatus = `Shortening URL for ${article.sourceName}...`;
             const finalUrl = await shortenUrl(article.url);
 
-            // 3. Draft with Gemini
+            // Draft with Gemini
             this.currentStatus = 'Drafting with Gemini...';
 
             // Provide fallback strings just in case the crawler missed the title or excerpt
@@ -58,7 +78,7 @@ class CronService {
                 return;
             }
 
-            // 4. Auto-Fix any posts that exceed 300 characters
+            // Auto-Fix any posts that exceed 300 characters
             this.currentStatus = 'Condensing long posts...';
             for (let i = 0; i < posts.length; i++) {
                 const currentPost = posts[i];
@@ -70,7 +90,11 @@ class CronService {
                 }
             }
 
-            // 5. Publish & Save to Database
+            // Hold for 30 seconds. The UI will display this exact countdown.
+            const proceed2 = await this.smartDelay(30, `⏳ Drafts ready! Auto-publishing in`);
+            if (!proceed2) return; // Abort if human clicked "Take Control"!
+
+            // Publish & Save to Database
             this.currentStatus = 'Publishing to Bluesky...';
             const validPosts = posts.filter(p => p.trim().length > 0);
 

@@ -56,6 +56,10 @@ export class CrawlerManager {
 
         throw new Error('Could not find any fresh articles after multiple attempts.');
     }
+
+    public getCrawlerById(crawlerId: string) {
+        return this.crawlers.find(c => c.constructor.name === crawlerId);
+    }
 }
 
 export const crawlerManager = new CrawlerManager();

@@ -124,6 +124,30 @@ app.get('/api/history', (req, res) => {
     }
 });
 
+// ==========================================
+// ENDPOINT 6: DRAFT STUDIO (MANUAL OVERRIDE)
+// ==========================================
+app.get('/api/studio/:crawlerId', async (req, res) => {
+    try {
+        const { crawlerId } = req.params;
+
+        // 1. Find the specific crawler by its class name
+        const crawler = crawlerManager.getCrawlerById(crawlerId);
+        if (!crawler) return res.status(404).json({ error: 'Crawler not found' });
+
+        // 2. Scrape one article
+        const article = await crawler.crawlRandomArticle();
+
+        // 3. Generate the draft using your EXISTING aiService method!
+        const finalUrl = await shortenUrl(article.url); // Let's shorten it too!
+        const posts = await generateInitialDraft(article.title, article.excerpt || '', finalUrl);
+
+        res.json({ article, posts });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`🌐 API Server is running on http://localhost:${PORT}`);

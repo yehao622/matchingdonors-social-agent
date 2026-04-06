@@ -49,5 +49,21 @@ export const api = {
     const res = await fetch(`${BASE_URL}/history`);
     if (!res.ok) throw new Error('Failed to fetch history');
     return res.json();
+  },
+
+  async getStudioDraft(crawlerId: string) {
+    const res = await fetch(`${BASE_URL}/studio/${crawlerId}`);
+    if (!res.ok) throw new Error('Failed to load Draft Studio');
+    return res.json();
+  },
+
+  async publishPost(posts: string[], sourceName: string, url: string) {
+    const res = await fetch(`${BASE_URL}/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ posts, sourceName, url })
+    });
+    if (!res.ok) throw new Error('Failed to publish');
+    return res.json();
   }
 };

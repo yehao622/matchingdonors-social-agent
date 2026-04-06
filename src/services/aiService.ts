@@ -30,14 +30,6 @@ export async function generateInitialDraft(title: string, summary: string, url: 
         OUTPUT STRICTLY AS A JSON ARRAY OF STRINGS. No markdown, no extra text.
     `;
 
-    // const response = await genAI.models.generateContent({
-    //     model: 'gemini-2.5-flash',
-    //     contents: prompt,
-    // });
-
-    // let rawText = response.text || '[]';
-    // rawText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-
     let text = await askGemini(prompt);
     text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
     return JSON.parse(text);
@@ -54,12 +46,6 @@ export async function condensePost(originalPost: string, userNote: string): Prom
         OUTPUT ONLY THE NEW TEXT STRING. No markdown, no quotes, no extra text.
     `;
 
-    // const response = await genAI.models.generateContent({
-    //     model: 'gemini-2.5-flash',
-    //     contents: prompt,
-    // });
-
-    // return response.text ? response.text.trim() : null;
     const text = await askGemini(prompt);
     return text.trim() || null;
 }
