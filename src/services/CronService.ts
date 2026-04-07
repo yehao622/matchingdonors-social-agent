@@ -10,13 +10,29 @@ class CronService {
     public isRunning: boolean = false;
     public currentStatus: string = 'Idle (Engine Stopped)';
 
+    public pendingArticle: any = null;
+    public pendingDrafts: string[] = [];
+
+    private isProcessing: boolean = false;
+
     public start() {
         if (this.isRunning) return;
         this.isRunning = true;
         this.currentStatus = 'Cron Engine Started! Waiting for next cycle...';
 
         this.task = cron.schedule('* * * * *', async () => {
-            await this.runWorkflow();
+            // THE LOCK: If a workflow is already running, skip this minute!
+            if (this.isProcessing) {
+                console.log('⏳ Previous cycle is still running. Skipping this minute to prevent overlap.');
+                return;
+            }
+
+            this.isProcessing = true;
+            try {
+                await this.runWorkflow();
+            } finally {
+                this.isProcessing = false; // Unlock the door when completely finished or if it crashes!
+            }
         });
 
         console.log('⏱️ Cron engine started!');
@@ -28,6 +44,7 @@ class CronService {
             this.task = null;
         }
         this.isRunning = false;
+        this.isProcessing = false;
         this.currentStatus = 'Idle (Engine Stopped)';
         console.log('🛑 Cron engine stopped!');
     }
@@ -54,18 +71,27 @@ class CronService {
         try {
             // 1. Scrape (Round-Robin skips duplicates automatically!)
             const article = await crawlerManager.fetchOneArticleFromSources();
+            const prefix = `[${article.sourceName}]`;
+
+            // Cache article
+            this.pendingArticle = article;
 
             // Tell the UI we succeeded, and hold for 4 seconds so the user can see it
-            this.currentStatus = `✅ Article found! Syncing UI...`;
+            this.currentStatus = `${prefix} ✅ Article found! Syncing UI...`;
             const proceed1 = await this.smartDelay(4);
             if (!proceed1) return; // Abort if human intervened!
 
             // Shorten URL
-            this.currentStatus = `Shortening URL for ${article.sourceName}...`;
+            this.currentStatus = `${prefix} Shortening URL...`;
             const finalUrl = await shortenUrl(article.url);
 
+            // 60-second delay to protect gemini api
+            this.currentStatus = `${prefix} ⏳ Waiting 30s to avoid Gemini API rate limits...`;
+            const proceedDraft = await this.smartDelay(30);
+            if (!proceedDraft) return;
+
             // Draft with Gemini
-            this.currentStatus = 'Drafting with Gemini...';
+            this.currentStatus = `${prefix} Drafting with Gemini...`;
 
             // Provide fallback strings just in case the crawler missed the title or excerpt
             const safeTitle = article.title || 'Medical News';
@@ -79,7 +105,7 @@ class CronService {
             }
 
             // Auto-Fix any posts that exceed 300 characters
-            this.currentStatus = 'Condensing long posts...';
+            this.currentStatus = `${prefix} Condensing long posts...`;
             for (let i = 0; i < posts.length; i++) {
                 const currentPost = posts[i];
 
@@ -90,19 +116,34 @@ class CronService {
                 }
             }
 
+            // Cache drafts
+            this.pendingDrafts = posts;
+
             // Hold for 30 seconds. The UI will display this exact countdown.
-            const proceed2 = await this.smartDelay(30, `⏳ Drafts ready! Auto-publishing in`);
+            const proceed2 = await this.smartDelay(30, `${prefix} ⏳ Drafts ready! Auto-publishing in`);
             if (!proceed2) return; // Abort if human clicked "Take Control"!
 
             // Publish & Save to Database
-            this.currentStatus = 'Publishing to Bluesky...';
+            this.currentStatus = `${prefix} Publishing to Bluesky...`;
             const validPosts = posts.filter(p => p.trim().length > 0);
+
+            // All-or-nothing publishing & history protection
+            if (validPosts.some(p => p.length > 300)) {
+                console.log(`⚠️ Aborting publish: Some posts are still over 300 chars after condensing.`);
+                this.currentStatus = 'Skipped: Posts exceeded character limits. Will retry later.';
+                // We return immediately! The thread is NOT published, and History is NOT saved!
+                return;
+            }
 
             if (validPosts.length > 0) {
                 await publishThreadToBluesky(validPosts);
                 historyService.markArticleCrawled(article.sourceName, article.url);
                 console.log(`✅ Cron Engine: Successfully published & recorded ${article.url}`);
                 this.currentStatus = `Sleeping. Last published from ${article.sourceName}.`;
+
+                // Clear cahce
+                this.pendingArticle = null;
+                this.pendingDrafts = [];
             } else {
                 this.currentStatus = 'Skipped publishing: No valid posts generated.';
             }

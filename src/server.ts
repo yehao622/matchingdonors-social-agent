@@ -131,6 +131,19 @@ app.get('/api/studio/:crawlerId', async (req, res) => {
     try {
         const { crawlerId } = req.params;
 
+        // If the cron engine was actively counting down, grab its data instantly!
+        if (cronService.pendingArticle && cronService.pendingDrafts.length > 0) {
+            console.log('⚡ Draft Studio intercepted the Cron Engine cache! Bypassing Gemini.');
+            const article = cronService.pendingArticle;
+            const posts = cronService.pendingDrafts;
+
+            // Clear the cache so it doesn't get accidentally reused later
+            cronService.pendingArticle = null;
+            cronService.pendingDrafts = [];
+
+            return res.json({ article, posts });
+        }
+
         // 1. Find the specific crawler by its class name
         const crawler = crawlerManager.getCrawlerById(crawlerId);
         if (!crawler) return res.status(404).json({ error: 'Crawler not found' });
@@ -141,6 +154,16 @@ app.get('/api/studio/:crawlerId', async (req, res) => {
         // 3. Generate the draft using your EXISTING aiService method!
         const finalUrl = await shortenUrl(article.url); // Let's shorten it too!
         const posts = await generateInitialDraft(article.title, article.excerpt || '', finalUrl);
+
+        for (let i = 0; i < posts.length; i++) {
+            const currentPost = posts[i];
+
+            if (currentPost && currentPost.length > 300) {
+                // Now we safely pass 'currentPost' instead of 'posts[i]'
+                const newText = await condensePost(currentPost, 'Make it more concise under 200 chars.');
+                if (newText) posts[i] = newText;
+            }
+        }
 
         res.json({ article, posts });
     } catch (error: any) {

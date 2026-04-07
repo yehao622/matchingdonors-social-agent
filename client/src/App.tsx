@@ -115,8 +115,17 @@ export default function App() {
       const postsArray = editedDraft.split('\n\n').filter(p => p.trim() !== '');
       if (postsArray.length === 0) return alert('Cannot publish empty posts!');
 
+      const overLimitIndex = postsArray.findIndex(p => p.length > 300);
+      if (overLimitIndex !== -1) {
+        setIsTimerPaused(true); // Keep timer paused!
+        return alert(`Wait! Post ${overLimitIndex + 1} is over the 300 character limit (${postsArray[overLimitIndex].length} chars). Please manually shorten it before publishing.`);
+      }
+
       await api.publishPost(postsArray, activeCrawler || 'Manual', draftData.article.url);
-      setIsDrafting(false); // Close modal on success
+      setIsDrafting(false);
+
+      await api.startEngine();
+      setIsRunning(true);
     } catch (error) {
       alert(`Failed to publish with error ${error}`);
     }
@@ -177,7 +186,7 @@ export default function App() {
         {/* Crawler Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {CRAWLER_SOURCES.map((source) => {
-            const isActive = isRunning && globalStatus.includes(source.id);
+            const isActive = isRunning && (globalStatus.includes(source.id) || globalStatus.includes(source.name));
             return (
               <div
                 key={source.id}
@@ -196,8 +205,8 @@ export default function App() {
                 <p className="text-xs text-gray-400 font-mono mt-1 mb-6">{source.id}</p>
                 <div className="bg-gray-50 rounded-xl p-4 min-h-[80px] flex items-center justify-center border border-gray-100/50">
                   <p className={`text-sm text-center font-medium ${!isRunning ? 'text-gray-400' :
-                      (isActive && (globalStatus.includes('⏳') || globalStatus.includes('✅'))) ? 'text-amber-600 font-bold animate-pulse' :
-                        isActive ? 'text-blue-600' : 'text-gray-400'
+                    (isActive && (globalStatus.includes('⏳') || globalStatus.includes('✅'))) ? 'text-amber-600 font-bold animate-pulse' :
+                      isActive ? 'text-blue-600' : 'text-gray-400'
                     }`}>
                     {!isRunning ? 'Offline' :
                       (isActive && (globalStatus.includes('⏳') || globalStatus.includes('✅'))) ? globalStatus :
@@ -205,7 +214,7 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* NEW: Take Control Button */}
+                {/* Take Control Button */}
                 <button
                   onClick={() => handleTakeControl(source.id)}
                   className="mt-4 w-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 py-2 rounded-xl text-sm font-semibold transition-colors"
@@ -304,7 +313,11 @@ export default function App() {
 
                 <div className="flex justify-end gap-3 mt-8">
                   <button
-                    onClick={() => setIsDrafting(false)}
+                    onClick={async () => {
+                      setIsDrafting(false);
+                      await api.startEngine();
+                      setIsRunning(true);
+                    }}
                     className="px-6 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
                   >
                     Cancel

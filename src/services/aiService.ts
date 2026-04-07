@@ -5,12 +5,30 @@ dotenv.config();
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-async function askGemini(prompt: string): Promise<string> {
-    const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-    });
-    return response.text || '';
+async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
+    let delayMs = 5000; // Start with a 5-second wait
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await genAI.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+            });
+            return response.text || '';
+        } catch (error: any) {
+            const isOverloaded = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('high demand');
+
+            if (isOverloaded && attempt < maxRetries) {
+                console.warn(`⚠️ Gemini API Overloaded (503). Retrying in ${delayMs / 1000}s... (Attempt ${attempt} of ${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                delayMs *= 2; // Double the wait time for the next attempt (5s -> 10s -> 20s)
+            } else {
+                // If it's a different error (like a bad API key), or we ran out of retries, throw it to the main Cron loop.
+                throw error;
+            }
+        }
+    }
+
+    return '';
 }
 
 export async function generateInitialDraft(title: string, summary: string, url: string): Promise<string[]> {
