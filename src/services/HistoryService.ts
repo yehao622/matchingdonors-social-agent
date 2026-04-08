@@ -20,6 +20,7 @@ export class HistoryService {
         // Create the table if it doesn't exist yet
         const stmt = this.db.prepare(`
             CREATE TABLE IF NOT EXISTS published_articles (
+                title TEXT,
                 url TEXT PRIMARY KEY,
                 source_name TEXT NOT NULL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -35,11 +36,11 @@ export class HistoryService {
         return !!row;
     }
 
-    public markArticleCrawled(sourceName: string, url: string): void {
+    public markArticleCrawled(title: string, sourceName: string, url: string): void {
         try {
             // INSERT OR IGNORE safely handles any accidental duplicate attempts
-            const stmt = this.db.prepare('INSERT OR IGNORE INTO published_articles (url, source_name) VALUES (?, ?)');
-            stmt.run(url, sourceName);
+            const stmt = this.db.prepare('INSERT INTO published_articles (title, source_name, url) VALUES (?, ?, ?)');
+            stmt.run(title, sourceName, url);
             console.log(`Saved to history: ${url}`);
         } catch (error) {
             console.error(`Failed to save to history: ${url}`, error);

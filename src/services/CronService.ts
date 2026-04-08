@@ -137,7 +137,7 @@ class CronService {
 
             if (validPosts.length > 0) {
                 await publishThreadToBluesky(validPosts);
-                historyService.markArticleCrawled(article.sourceName, article.url);
+                historyService.markArticleCrawled(article.title || 'Medical News', article.sourceName, article.url);
                 console.log(`✅ Cron Engine: Successfully published & recorded ${article.url}`);
                 this.currentStatus = `Sleeping. Last published from ${article.sourceName}.`;
 

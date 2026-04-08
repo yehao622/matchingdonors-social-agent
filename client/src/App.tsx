@@ -21,6 +21,7 @@ interface HistoryItem {
   timestamp: string;
   source_name: string;
   url: string;
+  title?: string;
 }
 
 interface DraftData {
@@ -41,6 +42,9 @@ export default function App() {
   const [editedDraft, setEditedDraft] = useState('');
   const [timeLeft, setTimeLeft] = useState(30);
   const [isTimerPaused, setIsTimerPaused] = useState(false);
+
+  // Detect if the iframe is asking for the widget!
+  const isWidgetMode = new URLSearchParams(window.location.search).get('mode') === 'widget';
 
   // ==========================================
   // 1. ENGINE & HISTORY POLLING
@@ -152,6 +156,46 @@ export default function App() {
   // ==========================================
   // 3. UI RENDER
   // ==========================================
+  if (isWidgetMode) {
+    return (
+      <div className="h-screen w-full bg-[#f9fafb] flex flex-col font-sans border-t-4 border-blue-600 overflow-hidden">
+        {/* Widget Header */}
+        <div className="p-4 bg-white border-b border-gray-100 flex items-center justify-between shadow-sm z-10 shrink-0">
+          <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+            </span>
+            Live Transplant News
+          </h2>
+        </div>
+
+        {/* Widget Scrolling Feed */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {history.length === 0 ? (
+            <div className="text-xs text-center text-gray-400 mt-10 font-medium">Waiting for live updates...</div>
+          ) : (
+            history.map((row, idx) => (
+              <div key={idx} className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                    {row.source_name}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium">
+                    {new Date(row.timestamp.replace(' ', 'T') + 'Z').toLocaleDateString()}
+                  </span>
+                </div>
+                <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-gray-900 hover:text-blue-600 hover:underline line-clamp-2 leading-snug">
+                  {row.title && row.title.length > 0 ? row.title : row.url}
+                </a>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f9fafb] p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">

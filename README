@@ -1,0 +1,86 @@
+# 🏥 MatchingDonors AI Social Media Agent
+
+An enterprise-grade, fully autonomous AI pipeline and web dashboard designed to drive organic social traffic for the MatchingDonors 501(c)(3) non-profit. The system programmatically scrapes medical news, leverages Google Gemini to draft concise social media threads, and publishes them directly to social media platform. 
+
+It features a robust **Human-in-the-Loop (HitL)** architecture, allowing administrators to pause the autonomous engine, manually edit AI drafts in a "Draft Studio," and safely resume background operations without hitting API rate limits.
+
+---
+
+## ✨ Key Features
+
+* **Autonomous Cron Engine:** A background `node-cron` pipeline that handles the entire lifecycle: scraping, URL shortening, AI drafting, auto-condensing, publishing, and database logging.
+* **Human-in-the-Loop "Draft Studio":** A React-based interface allowing humans to take manual control of any crawler. It features a synchronized 30-second "Ghost Timer" that auto-publishes if no human edits are detected.
+* **Smart Concurrency & Mutex Locks:** Engineered with strict execution locks (`isProcessing`) to prevent overlapping cron schedules and race conditions during long-running API calls.
+* **API Resilience & Caching:** Implements an Exponential Backoff and Retry algorithm to handle AI agent API Overload errors. Features an "Instant Cache Hand-off" that completely bypasses redundant AI API calls if a human intercepts a pending automated draft.
+* **Multi-Source Scraping:** Features an abstract `CrawlerManager` running 6 custom, anti-bot-resistant web scrapers targeting primary medical sources (OPTN, PLOS, PubMed, Daily Diabetes, etc.).
+* **Pre-Publish Guardrails:** Strict character-limit validation ensures all posts adhere to number of character limit, automatically utilizing AI to condense long text before failing over to human intervention.
+
+---
+
+## 🛠️ Tech Stack
+
+**Backend & AI Pipeline**
+* **Runtime:** Node.js, TypeScript
+* **Server:** Express.js REST API
+* **AI Provider:** Google Gemini API (`gemini-2.5-flash`)
+* **Scraping:** Cheerio, RSS Parser
+* **Database:** SQLite (Persistent History Logging)
+* **Automation:** Node-Cron
+
+**Frontend Dashboard**
+* **Framework:** React 18, Vite
+* **Styling:** Tailwind CSS v4
+* **State Management:** React Hooks (`useState`, `useEffect`)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+Ensure you have [Node.js](https://nodejs.org/) (v18+ recommended) and `npm` installed.
+
+### 2. Environment Variables
+Create a `.env` file in the root directory of the project and add the following keys:
+
+```env
+GEMINI_API_KEY=your_google_gemini_api_key
+SOCIALMEDIA_IDENTIFIER=your_socialmedia_handle_or_email
+SOCIALMEDIA_PASSWORD=your_socialmedia_app_password
+PORT=3001
+
+### 3. Install the dependencies for both the backend and the frontend
+# Install backend dependencies
+npm install
+
+# Install frontend dependencies
+cd client
+npm install
+cd ..
+
+### 4. Running the Application (Need two terminal windows to run simultaneously)
+# Terminal 1: Start the Node Backend, From the root directory
+npx tsx src/server.ts
+
+# Terminal 2: Start the React Frontend, From the /client directory
+npm run dev
+
+
+⚙️ Architecture Workflow
+    1. Poll & Scrape: The CronService ticks every 60 seconds. It checks the Mutex lock, then uses the CrawlerManager to round-robin select a news source and scrape an un-published article.
+
+    2. Shorten & Delay: The article URL is shortened via TinyURL. The system engages a smartDelay to protect against Gemini API rate limits.
+
+    3. AI Drafting: aiService prompts Gemini to generate an engaging, empathetic 2-part thread with appropriate hashtags.
+
+    4. Auto-Condense Loop: If any generated post exceeds 300 characters, the backend automatically prompts Gemini to condense it.
+
+    5. Human Override Window: The backend enters a 30-second delay. The React UI displays a yellow ⏳ Auto-publishing in 29s... warning.
+      a). If untouched: The system auto-publishes to your social media post, records the URL in SQLite, and clears its cache.
+      b). If "Take Control" is clicked: The frontend sends a kill switch command to the backend. The backend pauses the Cron engine, hands off its cached AI drafts to the frontend Modal, and awaits manual human publication.
+
+    6. Public "Widget Mode" (Embeddable UI)
+    The React frontend includes a stealth **Widget Mode** designed to be embedded securely on public-facing websites (like the MatchingDonors homepage) without exposing the administrative controls.   
+    * **SEO Optimized:** The widget displays clickable, highly descriptive article titles rather than raw URLs to boost page authority.
+
+📝 License
+This project was developed for the MatchingDonors 501(c)(3) organization.

@@ -10,7 +10,7 @@ async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             const response = await genAI.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-lite',
                 contents: prompt,
             });
             return response.text || '';
