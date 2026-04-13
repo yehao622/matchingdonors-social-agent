@@ -83,7 +83,8 @@ class CronService {
 
             // Shorten URL
             this.currentStatus = `${prefix} Shortening URL...`;
-            const finalUrl = await shortenUrl(article.url);
+            const trackingString = `?utm_source=bluesky&utm_medium=social&utm_campaign=ai_${encodeURIComponent(article.sourceName.replace(/\s+/g, '_'))}`;
+            const finalUrl = await shortenUrl(article.url + trackingString);
 
             // 60-second delay to protect gemini api
             this.currentStatus = `${prefix} ⏳ Waiting 30s to avoid Gemini API rate limits...`;

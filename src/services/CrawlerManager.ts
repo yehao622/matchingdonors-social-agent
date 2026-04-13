@@ -6,8 +6,12 @@ import { PlosCrawler } from './crawler/PlosCrawler.js';
 import { OptnCrawler } from './crawler/OptnCrawler.js';
 import { historyService } from './HistoryService.js';
 
+export interface ICrawler {
+    crawlRandomArticle(): Promise<{ title: string; excerpt: string; url: string; content?: string }>;
+}
+
 export class CrawlerManager {
-    private crawlers: any[];
+    private crawlers: ICrawler[];
     private currentIndex: number = 0;
 
     constructor() {
@@ -22,7 +26,13 @@ export class CrawlerManager {
         ];
     }
 
-    public async fetchOneArticleFromSources() {
+    public async fetchOneArticleFromSources(): Promise<{
+        title: string;
+        excerpt: string;
+        url: string;
+        content?: string;
+        sourceName: string
+    }> {
         let attempts = 0;
         const maxAttempts = this.crawlers.length;
 
@@ -30,6 +40,11 @@ export class CrawlerManager {
             attempts++;
 
             const selectedCrawler = this.crawlers[this.currentIndex];
+            if (!selectedCrawler) {
+                console.warn('⚠️ Encountered undefined crawler in array. Skipping.');
+                continue;
+            }
+
             this.currentIndex = (this.currentIndex + 1) % this.crawlers.length;
 
             console.log(` [Attempt ${attempts}] routing to: ${selectedCrawler.constructor.name}`);

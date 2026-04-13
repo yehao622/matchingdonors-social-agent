@@ -13,7 +13,14 @@ export class HistoryService {
 
         // Initialize the SQLite database
         this.db = new Database(path.join(dataDir, 'history.db'));
+        // Enable Concurrent Read/Writes (WAL Mode)
+        this.db.pragma('journal_mode = WAL');
         this.initDb();
+    }
+
+    public close() {
+        console.log('📦 Safely closing SQLite database...');
+        this.db.close();
     }
 
     private initDb() {

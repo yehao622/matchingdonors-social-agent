@@ -1,11 +1,13 @@
 import { GoogleGenAI } from '@google/genai';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+let genAI: GoogleGenAI | null = null;
 
 async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
+    // LAZY INITIALIZATION: Create the client right before we need it.
+    if (!genAI) {
+        genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+    }
+
     let delayMs = 5000; // Start with a 5-second wait
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -49,8 +51,26 @@ export async function generateInitialDraft(title: string, summary: string, url: 
     `;
 
     let text = await askGemini(prompt);
-    text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    return JSON.parse(text);
+
+    try {
+        // Find the first '[' and the last ']'
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+
+        if (start === -1 || end === -1) {
+            throw new Error("Gemini did not return a valid array.");
+        }
+
+        const jsonString = text.substring(start, end + 1);
+        return JSON.parse(jsonString);
+
+    } catch (error) {
+        console.error("⚠️ Failed to parse Gemini response:", text);
+        // Fallback to avoid crashing the bot: return a safe default
+        return [
+            `Medical News Update: ${title} #OrganDonation #TransplantNews\n\nRead more: ${url}`
+        ];
+    }
 }
 
 export async function condensePost(originalPost: string, userNote: string): Promise<string | null> {

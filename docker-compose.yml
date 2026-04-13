@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  socila-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: matchingdonors-agent
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "cli": "npx tsx src/index.ts",
-    "server": "npx tsx src/server.ts",
+    "dev": "npx tsx src/server.ts",
+    "build": "tsc && cd client && npm run build",
+    "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
