@@ -99,7 +99,7 @@ app.post('/api/publish', async (req, res) => {
         await publishThreadToBluesky(posts);
 
         if (url && sourceName) {
-            historyService.markArticleCrawled(title || 'Manual Edit', sourceName, url);
+            await historyService.markArticleCrawled(title || 'Manual Edit', sourceName, url);
         }
 
         res.json({ success: true, message: 'Successfully published to Bluesky!' });
@@ -132,9 +132,9 @@ app.post('/api/cron/stop', (req, res) => {
 // ==========================================
 // ENDPOINT 5: HISTORY LOG
 // ==========================================
-app.get('/api/history', (req, res) => {
+app.get('/api/history', async (req, res) => {
     try {
-        const records = historyService.getRecentHistory();
+        const records = await historyService.getRecentHistory();
         res.json(records);
     } catch (error) {
         console.error('History fetch error:', error);
@@ -212,7 +212,10 @@ app.get(/.*/, (req, res) => {
 // });
 
 // Start the server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+    // Initialize the database (Postgres OR SQLite) before accepting traffic
+    await historyService.init();
+
     console.log(`🌐 API Server is running on http://localhost:${PORT}`);
     console.log(`Use 'npx tsx src/index.ts' if you want to run the CLI instead!`);
 });
@@ -220,10 +223,10 @@ app.listen(PORT, () => {
 // ==========================================
 // GRACEFUL SHUTDOWN
 // ==========================================
-const shutdown = () => {
+const shutdown = async () => {
     console.log('\n🛑 Shutting down gracefully...');
     cronService.stop();         // 1. Stop the cron engine from starting new jobs
-    historyService.close();     // 2. Safely close the database to prevent corruption
+    await historyService.close();     // 2. Safely close the database to prevent corruption
     process.exit(0);            // 3. Exit safely
 };
 

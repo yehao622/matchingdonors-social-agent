@@ -52,7 +52,7 @@ export class CrawlerManager {
             try {
                 const articleData = await selectedCrawler.crawlRandomArticle();
 
-                if (historyService.isArticleCrawled(articleData.url)) {
+                if (await historyService.isArticleCrawled(articleData.url)) {
                     console.log(`Already published previously. Skipping: ${articleData.url}`);
                     continue;
                 }

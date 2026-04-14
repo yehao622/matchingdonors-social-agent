@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-agent-swarm
+spec:
+  replicas: 5 # <-- Your 5-Agent Swarm!
+  selector:
+    matchLabels:
+      app: social-agent
+  template:
+    metadata:
+      labels:
+        app: social-agent
+    spec:
+      containers:
+        - name: social-agent
+          image: matchingdonors-agent:latest
+          imagePullPolicy: Never # <-- Forces Minikube to use your local image
+          env:
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DATABASE_URL
+              value: "postgresql://agent_admin:secure_password_123@postgres-service:5432/matchingdonors_db"
+            - name: GEMINI_API_KEY
+              value: "AIzREPLACE_ME_IN_PRODUCTION"
+            - name: BLUESKY_HANDLE
+              value: "REPLACE_ME_IN_PRODUCTION"
+            - name: BLUESKY_PASSWORD
+              value: "REPLACE_ME_IN_PRODUCTION"
+          ports:
+            - containerPort: 3001
