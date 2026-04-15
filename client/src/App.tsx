@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { api } from './apiClient';
 import { StatusBadge } from './components/StatusBadge';
 import { Button } from './components/Button';
+import { AnalyticsChart } from './components/AnalyticsChart';
+
 
 const CRAWLER_SOURCES = [
   { id: 'OptnCrawler', name: 'OPTN Gov Network' },
@@ -106,33 +108,6 @@ export default function App() {
     }
   };
 
-  // ==========================================
-  // 2. DRAFT STUDIO CONTROLS
-  // ==========================================
-  // const handleTakeControl = async (crawlerId: string) => {
-  //   // Instantly pause the background engine!
-  //   if (isRunning) {
-  //     await api.stopEngine();
-  //     setIsRunning(false);
-  //     setGlobalStatus('⚙️ Manual Override Engaged (Engine Paused)');
-  //   }
-
-  //   setIsDrafting(true);
-  //   setActiveCrawler(crawlerId);
-  //   setDraftData(null);
-  //   setTimeLeft(30);
-  //   setIsTimerPaused(false);
-
-  //   try {
-  //     const data = await api.getStudioDraft(crawlerId);
-  //     setDraftData(data);
-  //     setEditedDraft(data.posts.join('\n\n'));
-  //   } catch (error) {
-  //     alert(`Failed to generate draft. Check backend console.: ${error}`);
-  //     setIsDrafting(false);
-  //   }
-  // };
-
   const handlePublish = async () => {
     if (!draftData) return;
 
@@ -177,7 +152,7 @@ export default function App() {
 
 
   // ==========================================
-  // 3. UI RENDER
+  // 2. UI RENDER
   // ==========================================
   if (isWidgetMode) {
     return (
@@ -347,6 +322,8 @@ export default function App() {
               </table>
             </div>
           </div>
+
+          <AnalyticsChart />
         </div>
 
         {/* Draft Studio Overlay */}
