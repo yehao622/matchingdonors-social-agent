@@ -48,8 +48,13 @@ export default function App() {
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSource, setSelectedSource] = useState('All Sources');
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Detect if the iframe is asking for the widget!
   const isWidgetMode = new URLSearchParams(window.location.search).get('mode') === 'widget';
+  const ITEMS_PER_PAGE = 10;
 
   // ==========================================
   // 1. ENGINE & HISTORY POLLING
@@ -150,6 +155,19 @@ export default function App() {
     return () => clearTimeout(timerId);
   }, [timeLeft, draftData, isTimerPaused, isDrafting]);
 
+  // Logic to filter and paginate data
+  const filteredHistory = history.filter(item => {
+    const matchesSearch = (item.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      item.url.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSource = selectedSource === 'All Sources' || item.source_name === selectedSource;
+    return matchesSearch && matchesSource;
+  });
+
+  const totalPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
+  const paginatedHistory = filteredHistory.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   // ==========================================
   // 2. UI RENDER
@@ -281,6 +299,29 @@ export default function App() {
             </div>
           </div>
 
+          {/* Search and Filter Bar */}
+          <div className="flex flex-col md:flex-row gap-4 mb-4">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search articles or URLs..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+            </div>
+
+            <select
+              className="px-4 py-2 border border-gray-200 rounded-xl bg-white text-gray-700 font-medium outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedSource}
+              onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(1); }}
+            >
+              <option>All Sources</option>
+              {CRAWLER_SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
           {/* Activity Log */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-xl font-bold mb-4">📝 Activity Log</h2>
@@ -294,7 +335,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {history.map((row, idx) => (
+                  {paginatedHistory.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
                       <td className="py-3 text-gray-500 font-medium whitespace-nowrap">
                         {row.timestamp.replace(' ', 'T')}Z
@@ -311,7 +352,9 @@ export default function App() {
                       </td>
                     </tr>
                   ))}
-                  {history.length === 0 && (
+
+                  {/* Fallback if search yields no results */}
+                  {paginatedHistory.length === 0 && (
                     <tr>
                       <td colSpan={3} className="py-8 text-center text-gray-400 font-medium italic">
                         No articles published yet.
@@ -322,6 +365,31 @@ export default function App() {
               </table>
             </div>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-6">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+              >
+                Previous
+              </Button>
+              <span className="text-sm font-bold text-gray-500">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
 
           <AnalyticsChart />
         </div>
@@ -397,16 +465,47 @@ export default function App() {
                     </a>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Review Thread</label>
-                    <textarea
-                      value={editedDraft}
-                      onChange={(e) => {
-                        setEditedDraft(e.target.value);
-                        setIsTimerPaused(true); // PAUSE TIMER IF HUMAN EDITS!
-                      }}
-                      className="w-full h-48 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 font-medium resize-none shadow-inner"
-                    />
+                  <div className="mt-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-3">Live Feed Preview</label>
+
+                    {/* Social Media Card Wrapper */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex gap-3">
+
+                        {/* Fake Profile Avatar */}
+                        <div className="w-12 h-12 bg-gradient-to-tr from-blue-500 to-sky-400 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                          <span className="text-white font-bold text-lg">MD</span>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          {/* Fake Header */}
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="font-bold text-gray-900 truncate">MatchingDonors</span>
+                            <svg className="w-4 h-4 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                            <span className="text-gray-500 text-sm truncate">@matchingdonors.org</span>
+                          </div>
+
+                          {/* Seamless Text Area */}
+                          <textarea
+                            value={editedDraft}
+                            onChange={(e) => {
+                              setEditedDraft(e.target.value);
+                              setIsTimerPaused(true); // PAUSE TIMER IF HUMAN EDITS!
+                            }}
+                            className="w-full h-40 bg-transparent text-gray-800 text-[15px] leading-relaxed resize-none outline-none focus:ring-0 p-0 border-0"
+                            placeholder="What's happening?"
+                          />
+
+                          {/* Fake Engagement Footer */}
+                          <div className="flex justify-between items-center text-gray-400 mt-2 pt-2 border-t border-gray-50 max-w-md">
+                            <button className="flex items-center gap-2 hover:text-blue-500 transition-colors"><span className="text-lg">💬</span></button>
+                            <button className="flex items-center gap-2 hover:text-green-500 transition-colors"><span className="text-lg">🔁</span></button>
+                            <button className="flex items-center gap-2 hover:text-pink-500 transition-colors"><span className="text-lg">❤️</span></button>
+                            <button className="flex items-center gap-2 hover:text-blue-500 transition-colors"><span className="text-lg">📊</span></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {isTimerPaused && (
