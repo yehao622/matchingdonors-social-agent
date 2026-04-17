@@ -170,6 +170,41 @@ export default function App() {
   );
 
   // ==========================================
+  // CSV EXPORT LOGIC
+  // ==========================================
+  const exportToCSV = () => {
+    if (filteredHistory.length === 0) return alert('No data to export!');
+
+    // CSV Headers
+    const headers = ['Timestamp (UTC)', 'Source Network', 'Article Title', 'Live URL'];
+
+    // Map data and escape commas/quotes in titles
+    const rows = filteredHistory.map(row => {
+      const safeTitle = `"${(row.title || 'Missing Title').replace(/"/g, '""')}"`;
+      return [row.timestamp, row.source_name, safeTitle, row.url].join(',');
+    });
+
+    // Combine headers and rows
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
+    // Create a downloadable Blob
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    // Generate a dynamic filename with today's date
+    link.href = url;
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `MatchingDonors_AI_Report_${dateStr}.csv`;
+    link.style.display = 'none';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // ==========================================
   // 2. UI RENDER
   // ==========================================
   if (isWidgetMode) {
@@ -300,26 +335,42 @@ export default function App() {
           </div>
 
           {/* Search and Filter Bar */}
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
+
+            {/* Search Bar (Grows to fill space) */}
+            <div className="relative flex-1 w-full">
               <input
                 type="text"
                 placeholder="Search articles or URLs..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-gray-700"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               />
-              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+              <span className="absolute left-3 top-3 text-gray-400">🔍</span>
             </div>
 
-            <select
-              className="px-4 py-2 border border-gray-200 rounded-xl bg-white text-gray-700 font-medium outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedSource}
-              onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(1); }}
-            >
-              <option>All Sources</option>
-              {CRAWLER_SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <div className="flex gap-3 w-full md:w-auto">
+              {/* Dropdown Filter */}
+              <select
+                className="flex-1 md:flex-none px-4 py-2.5 border border-gray-200 rounded-xl bg-white text-gray-700 font-medium outline-none focus:ring-2 focus:ring-blue-500 shadow-sm hover:border-gray-300 transition-colors cursor-pointer"
+                value={selectedSource}
+                onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(1); }}
+              >
+                <option>All Sources</option>
+                {CRAWLER_SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+
+              {/* The New Export Button */}
+              <button
+                onClick={exportToCSV}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-green-500 text-green-600 font-bold rounded-xl hover:bg-green-50 hover:shadow-sm transition-all focus:ring-2 focus:ring-green-500 focus:outline-none"
+                title="Download filtered data as spreadsheet"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span className="hidden sm:inline">Export Report</span>
+              </button>
+            </div>
+
           </div>
 
           {/* Activity Log */}
@@ -512,25 +563,41 @@ export default function App() {
                     <p className="text-amber-600 text-sm font-bold animate-pulse">⚠️ Timer paused. Manual edit mode engaged.</p>
                   )}
 
-                  <div className="flex justify-end gap-3 mt-8">
-                    {/* DRY Buttons for Cancel and Publish */}
-                    <Button
-                      variant="ghost"
-                      onClick={async () => {
-                        setIsDrafting(false);
-                        setDraftData(null);
-                        await api.startEngine();
-                        setIsRunning(true);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handlePublish}
-                    >
-                      Publish Now
-                    </Button>
+                  <div className="flex justify-between items-center mt-8 pt-4 border-t border-gray-100">
+
+                    {/* Dynamic Character Counters for Threaded Posts */}
+                    <div className="flex flex-col gap-1">
+                      {editedDraft.split('\n\n').filter(p => p.trim() !== '').map((post, idx) => {
+                        const isOverLimit = post.length > 300;
+                        return (
+                          <span key={idx} className={`text-sm font-bold flex items-center gap-1.5 transition-colors ${isOverLimit ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                            {isOverLimit ? '⚠️' : '✅'}
+                            Post {idx + 1}: {post.length} / 300
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          setIsDrafting(false);
+                          setDraftData(null);
+                          await api.startEngine();
+                          setIsRunning(true);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={handlePublish}
+                        disabled={editedDraft.split('\n\n').some(p => p.length > 300)} // Bonus: Disables the button if over limit!
+                      >
+                        Publish Now
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
