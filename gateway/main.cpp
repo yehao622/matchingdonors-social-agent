@@ -97,8 +97,13 @@ private:
     void connect_to_backend(std::size_t initial_bytes)
     {
         auto self(shared_from_this());
+
+        // Try to read BACKEND_HOST from Docker, otherwiese, default to 'localhost'
+        const char *env_host = std::getenv("BACKEND_HOST");
+        std::string target_host = env_host ? env_host : "localhost";
+
         // Resolve the local Node.js server port 3001
-        resolver_.async_resolve("localhost", "3001",
+        resolver_.async_resolve(target_host, "3001",
                                 [this, self, initial_bytes](const boost::system::error_code &ec, tcp::resolver::results_type results)
                                 {
                                     if (!ec)
