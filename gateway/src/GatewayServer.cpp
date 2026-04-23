@@ -1,60 +1,6 @@
+#include "../include/GatewayServer.hpp"
 #include <iostream>
-#include <memory>
-#include <array>
-#include <string_view>
-#include <unordered_map>
-#include <mutex>
-#include <boost/asio.hpp>
 
-using boost::asio::ip::tcp;
-
-// ==========================================
-// DEVSECOPS SECURITY ENGINE (WAF)
-// ==========================================
-class SecurityEngine
-{
-private:
-    std::unordered_map<std::string, int> request_counts_;
-    std::mutex mutex_;
-    const int MAX_REQUESTS = 5;
-
-    std::array<std::string_view, 3> malicious_signatures_ = {
-        "DROP TABLE",
-        "<script>",
-        "UNION SELECT"};
-
-public:
-    bool inspect_traffic(const std::string &ip_address, const std::string_view &payload)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-
-        // Rate limit: Check if IP is spaming
-        request_counts_[ip_address]++;
-        if (request_counts_[ip_address] > MAX_REQUESTS)
-        {
-            std::cerr << "[WAF Blocked] Rate limit exceeded for IP: " << ip_address << "\n";
-            return true;
-        }
-
-        // Payload inspection: Check for malicious string
-        for (const auto &signature : malicious_signatures_)
-        {
-            if (payload.find(signature) != std::string_view::npos)
-            {
-                std::cerr << "[WAF Blocked] Malicious payload " << signature << "' detected from IP: " << ip_address << "\n";
-
-                return false;
-            }
-        }
-
-        return true;
-    }
-};
-
-// ==========================================
-// PROXY SESSION CLASS
-// Handles the lifecycle of a single user connection
-// ==========================================
 class ProxySession : public std::enable_shared_from_this<ProxySession>
 {
 private:
@@ -235,53 +181,24 @@ public:
     }
 };
 
-// ==========================================
-// ASYNC SERVER CLASS
-// ==========================================
-class GatewayServer
+void GatewayServer::accept_connections()
 {
-private:
-    tcp::acceptor acceptor_;
-    boost::asio::io_context &ioc_;
-    SecurityEngine waf_;
-
-    void accept_connection()
-    {
-        acceptor_.async_accept(
-            [this](boost::system::error_code ec, tcp::socket socket)
+    acceptor_.async_accept(
+        [this](boost::system::error_code ec, tcp::socket socket)
+        {
+            if (!ec)
             {
-                if (!ec)
-                {
-                    std::make_shared<ProxySession>(std::move(socket), ioc_, waf_)->start();
-                }
-                // Recursively accept the next connection without blocking
-                accept_connection();
-            });
-    }
+                std::make_shared<ProxySession>(std::move(socket), ioc_, waf_)->start();
+            }
+            // Recursively accept the next connection without blocking
+            accept_connections();
+        });
+}
 
-public:
-    GatewayServer(boost::asio::io_context &ioc, unsigned short port) : ioc_(ioc),
-                                                                       acceptor_(ioc, tcp::endpoint(tcp::v4(), port))
-    {
-        std::cout << "🛡️ Zero-Trust C++ Gateway listening on port " << port << "...\n";
-        std::cout << "🔄 Proxying traffic to Node.js backend on port 3001...\n";
-        accept_connection();
-    }
-};
-
-int main(int argc, char *argv[])
+GatewayServer::GatewayServer(boost::asio::io_context &ioc, short port) : ioc_(ioc),
+                                                                         acceptor_(ioc, tcp::endpoint(tcp::v4(), port))
 {
-    try
-    {
-        // The io_context represents your program's link to the OS I/O services
-        boost::asio::io_context io_context;
-        GatewayServer server(io_context, 8080);
-        io_context.run();
-    }
-    catch (std::exception &e)
-    {
-        std::cerr << "Server Exception: " << e.what() << "\n";
-    }
-
-    return 0;
+    std::cout << "🛡️ Zero-Trust C++ Gateway listening on port " << port << "...\n";
+    std::cout << "🔄 Proxying traffic to Node.js backend on port 3001...\n";
+    accept_connections();
 }
