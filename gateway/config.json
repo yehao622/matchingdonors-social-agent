@@ -1,0 +1,11 @@
+{
+    "waf": {
+        "max_requests_per_minute": 5,
+        "malicious_signatures": [
+            "DROP TABLE",
+            "<script>",
+            "UNION SELECT",
+            "HACKER_ATTACK"
+        ]
+    }
+}

@@ -1,9 +1,4 @@
-#pragma once
-#include "SecurityEngine.hpp"
-#include <boost/asio.hpp>
-#include <memory>
-
-using boost::asio::ip::tcp;
+#include "../include/ProxySession.hpp"
 
 class GatewayServer
 {

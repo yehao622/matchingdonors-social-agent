@@ -5,7 +5,8 @@ FROM ubuntu:22.04 AS builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
-    libboost-all-dev
+    libboost-all-dev \
+    nlohmann-json3-dev
 
 WORKDIR /src
 COPY . .
@@ -22,6 +23,8 @@ WORKDIR /app
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /src/build/gateway /app/gateway
+
+COPY config.json /app/config.json
 
 EXPOSE 8080
 

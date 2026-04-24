@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 #Find Boost(Asio networking library)
 find_package(Boost REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # Include the headers directory
 include_directories(include)
@@ -17,7 +18,8 @@ add_executable(gateway
     src/main.cpp 
     src/SecurityEngine.cpp 
     src/GatewayServer.cpp
+    src/ProxySession.cpp
 )
 
 #Link Boost libraries and threading
-target_link_libraries(gateway Boost::boost pthread)
+target_link_libraries(gateway Boost::boost pthread nlohmann_json::nlohmann_json)
