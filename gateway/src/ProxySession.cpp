@@ -40,34 +40,13 @@ void ProxySession::connect_to_backend(std::size_t initial_bytes)
                             {
                                 if (!ec)
                                 {
-                                    boost::asio::async_connect(backend_socket_, results,
-                                                               [this, self, initial_bytes](const boost::system::error_code &ec, const tcp::endpoint &endpoint)
-                                                               {
-                                                                   if (!ec)
-                                                                   {
-                                                                       // Forward the INITIAL chunk we already read
-                                                                       boost::asio::async_write(backend_socket_, boost::asio::buffer(client_buffer_, initial_bytes),
-                                                                                                [this, self](boost::system::error_code ec, std::size_t)
-                                                                                                {
-                                                                                                    if (!ec)
-                                                                                                    {
-                                                                                                        pump_from_client();
-                                                                                                        pump_from_backend();
-                                                                                                    }
-                                                                                                    else
-                                                                                                    {
-                                                                                                        std::cerr << "❌ Failed to write initial bytes: " << ec.message() << "\n";
-                                                                                                        close_session();
-                                                                                                    }
-                                                                                                });
-                                                                   }
-                                                                   else
-                                                                   {
-                                                                       // Observability! If it fails, tell us EXACTLY why.
-                                                                       std::cerr << "❌ Failed to connect to Node.js on 3001: " << ec.message() << "\n";
-                                                                       close_session();
-                                                                   }
-                                                               });
+                                    // Start the bidirectional data pump
+
+                                    // Pump 1. Client -> backend
+                                    pump_data(&client_socket_, &backend_socket_, &client_buffer_);
+
+                                    // Pump 2. Backend -> client
+                                    pump_data(&backend_socket_, &client_socket_, &backend_buffer_);
                                 }
                                 else
                                 {
@@ -77,52 +56,34 @@ void ProxySession::connect_to_backend(std::size_t initial_bytes)
                             });
 }
 
-void ProxySession::pump_from_client()
+void ProxySession::pump_data(tcp::socket *source, tcp::socket *destination, std::array<char, 8192> *buffer)
 {
     auto self(shared_from_this());
-    client_socket_.async_read_some(boost::asio::buffer(client_buffer_),
-                                   [this, self](boost::system::error_code ec, std::size_t length)
-                                   {
-                                       if (!ec)
-                                       {
-                                           boost::asio::async_write(backend_socket_, boost::asio::buffer(client_buffer_, length),
-                                                                    [this, self](boost::system::error_code ec, std::size_t)
-                                                                    {
-                                                                        if (!ec)
-                                                                        {
-                                                                            pump_from_client();
-                                                                        }
-                                                                        else
-                                                                            close_session();
-                                                                    });
-                                       }
-                                       else
-                                           close_session();
-                                   });
-}
 
-void ProxySession::pump_from_backend()
-{
-    auto self(shared_from_this());
-    backend_socket_.async_read_some(boost::asio::buffer(backend_buffer_),
-                                    [this, self](boost::system::error_code ec, std::size_t length)
-                                    {
-                                        if (!ec)
-                                        {
-                                            boost::asio::async_write(client_socket_, boost::asio::buffer(backend_buffer_, length),
-                                                                     [this, self](boost::system::error_code ec, std::size_t)
-                                                                     {
-                                                                         if (!ec)
-                                                                         {
-                                                                             pump_from_backend();
-                                                                         }
-                                                                         else
-                                                                             close_session();
-                                                                     });
-                                        }
-                                        else
-                                            close_session();
-                                    });
+    source->async_read_some(boost::asio::buffer(*buffer),
+                            [this, self, source, destination, buffer](boost::system::error_code ec, std::size_t length)
+                            {
+                                if (!ec)
+                                {
+                                    // Write to destination buffer
+                                    boost::asio::async_write(*destination, boost::asio::buffer(*buffer, length),
+                                                             [this, self, source, destination, buffer](boost::system::error_code ec, std::size_t)
+                                                             {
+                                                                 if (!ec)
+                                                                 {
+                                                                     pump_data(source, destination, buffer);
+                                                                 }
+                                                                 else
+                                                                 {
+                                                                     close_session();
+                                                                 }
+                                                             });
+                                }
+                                else
+                                {
+                                    close_session();
+                                }
+                            });
 }
 
 ProxySession::ProxySession(tcp::socket socket, boost::asio::io_context &ioc, SecurityEngine &waf) : client_socket_(std::move(socket)),

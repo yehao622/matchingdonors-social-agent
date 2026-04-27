@@ -8,6 +8,28 @@ using json = nlohmann::json;
 SecurityEngine::SecurityEngine(const std::string &config_file)
 {
     load_config(config_file);
+
+    // --- CONNECT TO REDIS ---
+    const char *env_redis = std::getenv("REDIS_HOST");
+    std::string redis_host = env_redis ? env_redis : "localhost";
+    redis_context_ = redisConnect(redis_host.c_str(), 6379);
+
+    if (redis_context_ != nullptr && redis_context_->err)
+    {
+        std::cerr << "❌ Redis Connection Error: " << redis_context_->errstr << "\n";
+    }
+    else
+    {
+        std::cout << "✅ Connected to Distributed Redis Cache at " << redis_host << "\n";
+    }
+}
+
+SecurityEngine::~SecurityEngine()
+{
+    if (redis_context_ != nullptr)
+    {
+        redisFree(redis_context_);
+    }
 }
 
 void SecurityEngine::load_config(const std::string &config_file)
@@ -42,11 +64,36 @@ bool SecurityEngine::inspect_traffic(const std::string &ip_address, std::string_
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    request_counts_[ip_address]++;
-    if (request_counts_[ip_address] > max_requests_)
+    // Distributed rate limiter
+    if (redis_context_ != nullptr && !redis_context_->err)
     {
-        std::cerr << "🚨 [WAF BLOCKED] Rate limit exceeded for IP: " << ip_address << "\n";
-        return false;
+        std::string redis_key = "rate_limit:" + ip_address;
+
+        // Increment the counter for this IP
+        redisReply *reply = (redisReply *)redisCommand(redis_context_, "INCR %s", redis_key.c_str());
+
+        if (reply != nullptr)
+        {
+            int current_count = reply->integer;
+            freeReplyObject(reply);
+
+            if (current_count == 1)
+            {
+                redisReply *expire_reply = (redisReply *)redisCommand(redis_context_, "EXPIRE %s 60", redis_key.c_str());
+                if (expire_reply)
+                    freeReplyObject(expire_reply);
+            }
+
+            if (current_count > max_requests_)
+            {
+                std::cerr << "🚨 [WAF BLOCKED] Distributed Rate limit exceeded for IP: " << ip_address << "\n";
+                return false;
+            }
+        }
+    }
+    else
+    {
+        std::cerr << "⚠️ Redis unavailable! Failing open (allowing traffic) but losing rate tracking.\n";
     }
 
     for (const auto &signature : malicious_signatures_)

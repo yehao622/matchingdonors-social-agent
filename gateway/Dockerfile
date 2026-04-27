@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     libboost-all-dev \
-    nlohmann-json3-dev
+    nlohmann-json3-dev \
+    libhiredis-dev
 
 WORKDIR /src
 COPY . .
@@ -17,7 +18,10 @@ RUN mkdir build && cd build && cmake .. && make
 # Stage 2. Runner production image
 FROM ubuntu:22.04 AS runner
 
-RUN apt-get update && apt-get install -y libboost-system1.74.0 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    libboost-system1.74.0 \
+    libhiredis0.14 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

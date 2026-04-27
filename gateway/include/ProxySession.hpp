@@ -21,8 +21,7 @@ private:
     void close_session();
     void reject_traffic();
     void connect_to_backend(std::size_t initial_bytes);
-    void pump_from_client();
-    void pump_from_backend();
+    void pump_data(tcp::socket *source, tcp::socket *destination, std::array<char, 8192> *buffer);
 
 public:
     ProxySession(tcp::socket socket, boost::asio::io_context &ioc, SecurityEngine &waf);

@@ -22,4 +22,4 @@ add_executable(gateway
 )
 
 #Link Boost libraries and threading
-target_link_libraries(gateway Boost::boost pthread nlohmann_json::nlohmann_json)
+target_link_libraries(gateway Boost::boost pthread nlohmann_json::nlohmann_json hiredis)
