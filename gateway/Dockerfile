@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y \
     cmake \
     libboost-all-dev \
     nlohmann-json3-dev \
-    libhiredis-dev
+    libhiredis-dev \
+    libssl-dev
 
 WORKDIR /src
 COPY . .
@@ -21,15 +22,20 @@ FROM ubuntu:22.04 AS runner
 RUN apt-get update && apt-get install -y \
     libboost-system1.74.0 \
     libhiredis0.14 \
+    openssl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /src/build/gateway /app/gateway
-
 COPY config.json /app/config.json
 
-EXPOSE 8080
+# Copy the SSL Certificates
+COPY server.crt /app/server.crt
+COPY server.key /app/server.key
+
+EXPOSE 443
 
 CMD ["./gateway"]

@@ -7,3 +7,6 @@ gateway/build/
 gateway/bin/
 *.o
 *.out
+
+*.crt
+*.key

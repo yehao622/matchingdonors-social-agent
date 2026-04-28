@@ -1,21 +1,31 @@
 version: '3.8'
 
 services:
-  # 1. C++ zero-trust gateway
+  # 1. In-Memory database: Redis
+  redis:
+    image: redis:alpine
+    container_name: matchingdonors-redis
+    expose:
+      - "6379"
+    restart: unless-stopped
+
+  # 2. C++ zero-trust gateway
   gateway:
     build:
       context: ./gateway
       dockerfile: Dockerfile
     container_name: matchingdonors-waf
     ports:
-      - "8080:8080"
+      - "443:443"
     environment:
       - BACKEND_HOST=social-agent
+      - REDIS_HOST=redis
     depends_on:
       - social-agent
+      - redis
     restart: unless-stopped
 
-  # 2. Backend AI agent
+  # 3. Backend AI agent
   social-agent:
     build:
       context: .

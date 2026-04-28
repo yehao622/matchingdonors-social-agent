@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
     {
         // The io_context represents your program's link to the OS I/O services
         boost::asio::io_context io_context;
-        GatewayServer server(io_context, 8080);
+        GatewayServer server(io_context, 443);
         io_context.run();
     }
     catch (std::exception &e)
