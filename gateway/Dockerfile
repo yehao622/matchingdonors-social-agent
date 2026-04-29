@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y \
     libboost-all-dev \
     nlohmann-json3-dev \
     libhiredis-dev \
-    libssl-dev
+    libssl-dev \
+    libspdlog-dev
 
 WORKDIR /src
 COPY . .
@@ -24,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     libhiredis0.14 \
     openssl \
     ca-certificates \
+    libfmt8 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

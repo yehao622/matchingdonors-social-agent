@@ -1,5 +1,4 @@
 #include "../include/ProxySession.hpp"
-#include <iostream>
 
 void ProxySession::close_session()
 {
@@ -30,53 +29,44 @@ void ProxySession::connect_to_backend(std::size_t initial_bytes)
 {
     auto self(shared_from_this());
 
-    // Try to read BACKEND_HOST from Docker, otherwiese, default to 'localhost'
-    const char *env_host = std::getenv("BACKEND_HOST");
-    std::string target_host = env_host ? env_host : "localhost";
+    // Look how much cleaner this is! No more async_resolve!
+    backend_socket_.async_connect(backend_endpoint_,
+                                  [this, self, initial_bytes](boost::system::error_code ec)
+                                  {
+                                      if (!ec)
+                                      {
+                                          // OPTIMIZATION: Backend Socket Tuning <---
+                                          boost::system::error_code option_ec;
+                                          backend_socket_.set_option(tcp::no_delay(true), option_ec);
+                                          backend_socket_.set_option(boost::asio::socket_base::keep_alive(true), option_ec);
 
-    // Resolve the local Node.js server port 3001
-    resolver_.async_resolve(target_host, "3001",
-                            [this, self, initial_bytes](const boost::system::error_code &ec, tcp::resolver::results_type results)
-                            {
-                                if (!ec)
-                                {
-                                    boost::asio::async_connect(backend_socket_, results,
-                                                               [this, self, initial_bytes](boost::system::error_code ec, tcp::endpoint)
-                                                               {
-                                                                   if (!ec)
+                                          boost::asio::async_write(backend_socket_, boost::asio::buffer(client_buffer_, initial_bytes),
+                                                                   [this, self](boost::system::error_code ec, std::size_t)
                                                                    {
-                                                                       boost::asio::async_write(backend_socket_, boost::asio::buffer(client_buffer_, initial_bytes),
-                                                                                                [this, self](boost::system::error_code ec, std::size_t)
-                                                                                                {
-                                                                                                    if (!ec)
-                                                                                                    {
-                                                                                                        pump_data(&client_socket_, &backend_socket_, &client_buffer_);
-                                                                                                        pump_data(&backend_socket_, &client_socket_, &backend_buffer_);
-                                                                                                    }
-                                                                                                    else
-                                                                                                    {
-                                                                                                        close_session();
-                                                                                                    }
-                                                                                                });
-                                                                   }
-                                                                   else
-                                                                   {
-                                                                       close_session();
-                                                                   }
-                                                               });
-                                }
-                                else
-                                {
-                                    std::cerr << "❌ DNS Resolution Failed: " << ec.message() << "\n";
-                                    close_session();
-                                }
-                            });
+                                                                       if (!ec)
+                                                                       {
+                                                                           pump_data(&client_socket_, &backend_socket_, &client_buffer_);
+                                                                           pump_data(&backend_socket_, &client_socket_, &backend_buffer_);
+                                                                       }
+                                                                       else
+                                                                       {
+                                                                           close_session();
+                                                                       }
+                                                                   });
+                                      }
+                                      else
+                                      {
+                                          close_session();
+                                      }
+                                  });
 }
 
-ProxySession::ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, SecurityEngine &waf) : client_socket_(std::move(socket), ssl_ctx),
-                                                                                                                                        backend_socket_(ioc),
-                                                                                                                                        resolver_(ioc),
-                                                                                                                                        waf_(waf)
+ProxySession::ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, SecurityEngine &waf, tcp::endpoint backend_endpoint)
+    : client_socket_(std::move(socket),
+                     ssl_ctx),
+      backend_socket_(ioc),
+      waf_(waf),
+      backend_endpoint_(backend_endpoint)
 {
 }
 
@@ -110,7 +100,7 @@ void ProxySession::read_from_client()
 
                                            if (waf_.inspect_traffic(client_ip, request_view))
                                            {
-                                               std::cout << "🔒 [SSL Gateway] Clean traffic from " << client_ip << ". Forwarding to Node...\n";
+                                               spdlog::info("🔒 [SSL Gateway] Clean traffic from {}. Forwarding to Node...", client_ip);
                                                connect_to_backend(length);
                                            }
                                            else

@@ -1,5 +1,4 @@
 #include "../include/SecurityEngine.hpp"
-#include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
 
@@ -16,11 +15,11 @@ SecurityEngine::SecurityEngine(const std::string &config_file)
 
     if (redis_context_ != nullptr && redis_context_->err)
     {
-        std::cerr << "❌ Redis Connection Error: " << redis_context_->errstr << "\n";
+        spdlog::error("❌ Redis Connection Error: {}", redis_context_->errstr);
     }
     else
     {
-        std::cout << "✅ Connected to Distributed Redis Cache at " << redis_host << "\n";
+        spdlog::info("✅ Connected to Distributed Redis Cache at {}", redis_host);
     }
 }
 
@@ -39,7 +38,7 @@ void SecurityEngine::load_config(const std::string &config_file)
         std::ifstream file(config_file);
         if (!file.is_open())
         {
-            std::cerr << "⚠️ Could not open " << config_file << ". Using default failsafe WAF rules.\n";
+            spdlog::error("⚠️ Could not open {}. Using default failsafe WAF rules.", config_file);
             max_requests_ = 5;
             malicious_signatures_ = {"DROP TABLE", "<script>"};
             return;
@@ -51,12 +50,12 @@ void SecurityEngine::load_config(const std::string &config_file)
         max_requests_ = config["waf"]["max_requests_per_minute"];
         malicious_signatures_ = config["waf"]["malicious_signatures"].get<std::vector<std::string>>();
 
-        std::cout << "✅ WAF Configuration loaded dynamically from " << config_file << "\n";
-        std::cout << "🛡️ Tracking " << malicious_signatures_.size() << " threat signatures.\n";
+        spdlog::info("✅ WAF Configuration loaded dynamically from {}.", config_file);
+        spdlog::info("🛡️ Tracking {} threat signatures.", malicious_signatures_.size());
     }
     catch (const std::exception &e)
     {
-        std::cerr << "❌ Fatal Error Parsing JSON: " << e.what() << "\n";
+        spdlog::error("❌ Fatal Error Parsing JSON: {}", e.what());
     }
 }
 
@@ -86,22 +85,21 @@ bool SecurityEngine::inspect_traffic(const std::string &ip_address, std::string_
 
             if (current_count > max_requests_)
             {
-                std::cerr << "🚨 [WAF BLOCKED] Distributed Rate limit exceeded for IP: " << ip_address << "\n";
+                spdlog::warn("🚨 [WAF BLOCKED] Distributed Rate limit exceeded for IP: {}", ip_address);
                 return false;
             }
         }
     }
     else
     {
-        std::cerr << "⚠️ Redis unavailable! Failing open (allowing traffic) but losing rate tracking.\n";
+        spdlog::error("⚠️ Redis unavailable! Failing open (allowing traffic) but losing rate tracking.");
     }
 
     for (const auto &signature : malicious_signatures_)
     {
         if (payload.find(signature) != std::string_view::npos)
         {
-            std::cerr << "🚨 [WAF BLOCKED] Malicious payload '" << signature
-                      << "' detected from IP: " << ip_address << "\n";
+            spdlog::warn("🚨 [WAF BLOCKED] Malicious payload '{}' detected from IP: {}", signature, ip_address);
             return false;
         }
     }

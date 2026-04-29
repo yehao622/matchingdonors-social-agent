@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <memory>
+#include <spdlog/spdlog.h>
 
 using boost::asio::ip::tcp;
 
@@ -11,7 +12,7 @@ class ProxySession : public std::enable_shared_from_this<ProxySession>
 private:
     boost::asio::ssl::stream<tcp::socket> client_socket_;
     tcp::socket backend_socket_;
-    tcp::resolver resolver_;
+    tcp::endpoint backend_endpoint_;
 
     // Memory-safe buffers for our bidirectional pump
     std::array<char, 8192> client_buffer_;
@@ -25,7 +26,7 @@ private:
     void read_from_client();
 
 public:
-    ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, SecurityEngine &waf);
+    ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, SecurityEngine &waf, tcp::endpoint backend_endpoint);
     void start();
 
     // Template here handles both SSL streams AND TCP sockets
