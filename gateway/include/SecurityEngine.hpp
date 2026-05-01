@@ -5,7 +5,6 @@
 #include <mutex>
 #include <vector>
 #include <hiredis/hiredis.h>
-#include <spdlog/spdlog.h>
 
 class SecurityEngine
 {

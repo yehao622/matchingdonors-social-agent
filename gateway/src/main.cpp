@@ -1,8 +1,6 @@
 #include "../include/GatewayServer.hpp"
 #include <thread>
 #include <vector>
-
-#define SPDLOG_COMPILED_LIB 0
 #include <spdlog/spdlog.h>
 
 int main(int argc, char *argv[])
@@ -42,6 +40,9 @@ int main(int argc, char *argv[])
                 t.join();
             }
         }
+
+        spdlog::info("✅ Server shutdown complete. Goodbye!");
+        spdlog::shutdown();
     }
     catch (std::exception &e)
     {

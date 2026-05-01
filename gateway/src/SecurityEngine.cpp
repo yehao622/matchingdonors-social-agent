@@ -1,6 +1,7 @@
 #include "../include/SecurityEngine.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 

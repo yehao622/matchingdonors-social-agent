@@ -1,11 +1,12 @@
 #pragma once
-#include "SecurityEngine.hpp"
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/signal_set.hpp>
 #include <memory>
-#include <spdlog/spdlog.h>
 
 using boost::asio::ip::tcp;
+
+class SecurityEngine;
 
 class ProxySession : public std::enable_shared_from_this<ProxySession>
 {
@@ -18,7 +19,7 @@ private:
     std::array<char, 8192> client_buffer_;
     std::array<char, 8192> backend_buffer_;
 
-    SecurityEngine &waf_;
+    std::shared_ptr<SecurityEngine> waf_;
 
     void close_session();
     void reject_traffic();
@@ -26,7 +27,7 @@ private:
     void read_from_client();
 
 public:
-    ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, SecurityEngine &waf, tcp::endpoint backend_endpoint);
+    ProxySession(tcp::socket socket, boost::asio::ssl::context &ssl_ctx, boost::asio::io_context &ioc, std::shared_ptr<SecurityEngine> waf, tcp::endpoint backend_endpoint);
     void start();
 
     // Template here handles both SSL streams AND TCP sockets
