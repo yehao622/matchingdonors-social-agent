@@ -3,6 +3,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <memory>
+#include <memory_resource>
 
 using boost::asio::ip::tcp;
 
@@ -17,7 +18,8 @@ private:
     boost::asio::signal_set signals_;
     std::shared_ptr<SecurityEngine> waf_;
 
-    tcp::endpoint backend_endpoint_; // Stores the Node.js IP!
+    tcp::endpoint backend_endpoint_;                   // Stores the Node.js IP!
+    std::pmr::synchronized_pool_resource memory_pool_; // Thread-safe memory allocator for massive concurrency
 
     void accept_connections();
     void resolve_backend();

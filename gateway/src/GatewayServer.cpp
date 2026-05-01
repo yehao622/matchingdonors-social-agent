@@ -28,8 +28,15 @@ void GatewayServer::accept_connections()
                     spdlog::warn("Failed to set socket options: {}", option_ec.message());
                 }
 
-                // Pass the SSL context into the Proxy Session
-                std::make_shared<ProxySession>(std::move(socket), ssl_context_, ioc_, waf_, backend_endpoint_)->start();
+                // Crave for memory, pass the SSL context into the Proxy Session
+                std::allocate_shared<ProxySession>(
+                    std::pmr::polymorphic_allocator<ProxySession>(&memory_pool_),
+                    std::move(socket),
+                    ssl_context_,
+                    ioc_,
+                    waf_,
+                    backend_endpoint_)
+                    ->start();
             }
             else
             {
