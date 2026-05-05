@@ -1,0 +1,71 @@
+.widgetContainer {
+  background-color: var(--widget-bg-color, #ffffff);
+  width: 100%;
+  height: 100vh; /* Fill the height of the iframe */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--widget-font-family, sans-serif);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.liveIndicator {
+  width: 10px;
+  height: 10px;
+  background-color: var(--widget-primary-blue, #007bff);
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
+.header h2 {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--widget-text-dark, #333);
+  margin: 0;
+}
+
+.feedScrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background-color: #f9f9f9;
+}
+
+.newsCard {
+  background-color: var(--widget-bg-color);
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sourceTag {
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--widget-primary-blue);
+  text-transform: uppercase;
+}
+
+.date {
+  font-size: 10px;
+  color: var(--widget-text-light);
+}
+
+.cardTitle {
+  font-size: 13px;
+  color: var(--widget-text-dark);
+  line-height: 1.4;
+  margin: 0;
+}

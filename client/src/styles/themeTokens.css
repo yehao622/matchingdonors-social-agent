@@ -1,0 +1,21 @@
+:root {
+  --widget-primary-blue: #346ce4;
+  /* Adjust to match Soledad's exact blue */
+  --widget-text-dark: #0d0101;
+  --widget-text-light: #0a3eea;
+  --widget-bg-color: #FFFFFF;
+  --widget-font-family: 'Helvetica Neue', Helvetica, Roboto, sans-serif;
+  /* Update after inspecting */
+}
+
+/* A scoped reset to protect our widget from WordPress global styles */
+.md-widget-reset {
+  all: initial;
+  /* Resets all inherited properties */
+  font-family: var(--widget-font-family);
+  box-sizing: border-box;
+}
+
+.md-widget-reset * {
+  box-sizing: inherit;
+}

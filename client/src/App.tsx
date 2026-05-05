@@ -3,7 +3,8 @@ import { api } from './apiClient';
 import { StatusBadge } from './components/StatusBadge';
 import { Button } from './components/Button';
 import { AnalyticsChart } from './components/AnalyticsChart';
-
+import NewsWidget from './components/NewsWidget/NewsWidget';
+import './styles/themeTokens.css';
 
 const CRAWLER_SOURCES = [
   { id: 'OptnCrawler', name: 'OPTN Gov Network' },
@@ -208,40 +209,7 @@ export default function App() {
   // 2. UI RENDER
   // ==========================================
   if (isWidgetMode) {
-    return (
-      <div className="h-screen w-full bg-[#f9fafb] flex flex-col font-sans border-t-4 border-blue-600 overflow-hidden">
-        <div className="p-4 bg-white border-b border-gray-100 flex items-center shadow-sm z-10 shrink-0">
-          <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-            </span>
-            Live Transplant News
-          </h2>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {history.length === 0 ? (
-            <div className="text-xs text-center text-gray-400 mt-10 font-medium">Waiting for live updates...</div>
-          ) : (
-            history.map((row, idx) => (
-              <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wide">
-                    {row.source_name}
-                  </span>
-                  <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap ml-2">
-                    {new Date(row.timestamp.replace(' ', 'T') + 'Z').toLocaleDateString()}
-                  </span>
-                </div>
-                <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-gray-900 hover:text-blue-600 hover:underline line-clamp-2 leading-snug">
-                  {row.title && row.title.length > 0 ? row.title : row.url}
-                </a>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
+    return <NewsWidget history={history} />;
   }
 
   return (
