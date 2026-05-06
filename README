@@ -1,10 +1,11 @@
 MatchingDonors AI Social Media Agent
 
-An enterprise-grade, fully autonomous AI pipeline and web dashboard designed to drive organic social traffic for the MatchingDonors 501(c)(3) non-profit.
+An enterprise-grade, automated content distribution engine designed to enhance inbound traffic and SEO for [MatchingDonors](https://matchingdonors.com). 
 
-The system programmatically scrapes medical news, leverages Google Gemini to draft concise social media threads, and publishes them directly to social media platforms. It features a robust Human-in-the-Loop (HitL) architecture, allowing administrators to pause the autonomous engine, manually edit AI drafts in a "Draft Studio," and safely resume background operations without hitting API rate limits.
+This system operates as a bridge between internal content generation and external social media audiences. It crawls newly published articles, uses AI to generate highly engaging, platform-specific social media threads, and publishes them with trackable UTM parameters to drive measurable traffic back to the platform.
 
-✨ Key Features
+
+## Key Features
 Autonomous Cron Engine: A background node-cron pipeline that handles the entire lifecycle: scraping, URL shortening, AI drafting, auto-condensing, publishing, and database logging.
 
 Human-in-the-Loop "Draft Studio": A React-based interface allowing humans to take manual control of any crawler. It features a synchronized 30-second "Ghost Timer" that auto-publishes if no human edits are detected.
@@ -16,6 +17,37 @@ Smart Concurrency & Mutex Locks: Engineered with strict execution locks (isProce
 Multi-Source Scraping: Features an abstract CrawlerManager running 6 custom, anti-bot-resistant web scrapers targeting primary medical sources (OPTN, PLOS, PubMed, Daily Diabetes, etc.).
 
 Pre-Publish Guardrails: Strict character-limit validation ensures all posts adhere to length limits, automatically utilizing AI to condense long text before failing over to human intervention.
+
+## 🏗️ System Architecture
+
+The project is divided into three highly decoupled, containerized services:
+
+### 1. The Core AI Engine (`/src`)
+A robust Node.js backend responsible for the business logic, web crawling, and API integrations.
+* **LLM Integration:** Interacts with AI to draft posts.
+* **Social APIs:** Manages authentication and publishing logic.
+* **Data Layer:** SQLite (`/data`) for storing historical posts and preventing duplicate publications.
+
+### 2. Zero-Trust API Gateway (`/gateway`)
+A high-performance C++17 gateway protecting the Core Engine. 
+* **Security:** Acts as a Web Application Firewall (WAF) with SSL termination.
+* **Performance:** Utilizes custom C++ memory pooling.
+* **Rate Limiting:** Implements distributed rate-limiting via an Alpine Redis instance to prevent API abuse.
+
+### 3. Frontend Dashboard & Widget (`/client`)
+A modern React application built with Vite and TypeScript.
+* **Dashboard:** Allows manual overrides, system monitoring, and CSV report exporting.
+* **Isolated Widget (`?mode=widget`):** A CSS-Module scoped, standalone feed designed to be embedded via `iframe` directly into the Soledad WordPress theme without CSS conflicts.
+
+## 📂 Repository Structure
+```text
+├── client/                 # React frontend (Dashboard & WP Widget)
+├── data/                   # SQLite database (History & Logs)
+├── gateway/                # C++ Zero-Trust API Gateway WAF
+├── k8s/                    # Kubernetes deployment manifests
+├── src/                    # Node.js Core Engine (Crawlers & AI)
+├── docker-compose.yml      # Local orchestration environment
+└── Dockerfile              # Node.js build instructions
 
 🛠️ Tech Stack
 Backend & AI Pipeline
@@ -40,6 +72,7 @@ SOCIALMEDIA_IDENTIFIER=your_socialmedia_handle_or_email
 SOCIALMEDIA_PASSWORD=your_socialmedia_app_password
 PORT=3001
 '
+
 
 # Database Configuration (sqlite or postgres)
 '
@@ -96,6 +129,7 @@ kubectl apply -f k8s/
 # 4. Open the Dashboard UI
 minikube service social-agent-service
 '
+
 
 ⚙️ Architecture Workflow
 Poll & Scrape: The CronService ticks every 60 seconds. It checks the Mutex lock, then uses the CrawlerManager to round-robin select a news source and scrape an un-published article.
