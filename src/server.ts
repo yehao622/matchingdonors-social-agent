@@ -200,16 +200,6 @@ app.get('/api/studio/:crawlerId', async (req, res) => {
 app.get(/.*/, (req, res) => {
     res.sendFile(path.join(process.cwd(), 'client/index.html'));
 });
-// that didn't match the /api routes above it.
-// app.use((req, res, next) => {
-//     // If it's a GET request (like a user typing a URL in the browser), serve the React App
-//     if (req.method === 'GET') {
-//         res.sendFile(path.join(process.cwd(), 'client/dist/index.html'));
-//     } else {
-//         // Otherwise, it's a bad API request
-//         res.status(404).json({ error: "Endpoint not found" });
-//     }
-// });
 
 // Start the server
 app.listen(PORT, async () => {

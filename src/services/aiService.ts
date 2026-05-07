@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { shortenUrl } from './urlService.js'
 
 let genAI: GoogleGenAI | null = null;
 
@@ -34,15 +35,18 @@ async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
 }
 
 export async function generateInitialDraft(title: string, summary: string, url: string): Promise<string[]> {
+    const generalTrackingUrl = "https://matchingdonors.com/life/?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_thread";
+    const shortGeneralUrl = await shortenUrl(generalTrackingUrl);
+
     const prompt = `
         You are the social media manager for MatchingDonors, a 501(c)(3) non-profit.
         Turn the following medical news into an engaging, empathetic 2-part social media thread.
 
         CRITICAL RULES:
         1. EACH individual post MUST be strictly LESS THAN 250 characters.
-        2. Include relevant emojis and hashtags like #OrganDonation or #TransplantNews. Also, remember
-        to add '#MatchingDonors Inc' with embedded link: 'https://matchingdonors.com/life'
-        3. The last post must include a call to action with this link: ${url}
+        2. TONE & TAGS: Be highly empathetic. Include hashtags like #OrganDonation and #MatchingDonors.
+        3. GENERAL CTA: Every post in the thread EXCEPT the last one MUST end with this exact raw URL: ${shortGeneralUrl}
+        4. The last post must include a call to action with this link: ${url}
         
         Article Title: ${title}
         Article Summary: ${summary}

@@ -1,0 +1,15 @@
+# ----------------------------------------
+# Traffic acquisition: Session campaign
+# Account: googlegrant@matchingdonors.com
+# Property: matchingdonors_analytics
+# ----------------------------------------
+# 
+# All Users
+# Start date: 20260409
+# End date: 20260506
+Session campaign,Session source / medium,Sessions,Engaged sessions,Engagement rate,Average engagement time per session,Events per session,Event count,Key events,Session key event rate,Total revenue
+(direct),(direct) / (none),24,9,0.375,17.541666666666668,4.416666666666667,106,0,0,0
+(organic),google / organic,5,3,0.6,38.6,7,35,0,0,0
+(not set),(not set),1,0,0,170,21,21,0,0,0
+(referral),cloud.3dissue.com / referral,1,0,0,0,3,3,0,0,0
+(referral),ui.awin.com / referral,1,0,0,0,3,3,0,0,0

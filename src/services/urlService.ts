@@ -1,9 +1,7 @@
 import axios from 'axios';
 
 // Add any domains here that you DO NOT want to shorten
-const EXCLUDED_DOMAINS = [
-    'matchingdonors.com'
-];
+const EXCLUDED_DOMAINS = [];
 
 export async function shortenUrl(originalUrl: string): Promise<string> {
     try {

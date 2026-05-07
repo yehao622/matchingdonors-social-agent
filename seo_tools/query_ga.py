@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from dotenv import load_dotenv
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
     DateRange,
@@ -11,8 +12,11 @@ from google.analytics.data_v1beta.types import (
     Filter,
 )
 
+load_dotenv()
+
 # 1. Set credentials environment variable
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_CREDENTIALS_PATH")
+property_id = os.getenv("GA4_PROPERTY_ID")
 
 def get_ga4_social_traffic(property_id: str, start_date: str = "30daysAgo", end_date: str = "today"):
     """
@@ -68,3 +72,24 @@ def get_ga4_social_traffic(property_id: str, start_date: str = "30daysAgo", end_
 # Example Usage:
 # ga4_df = get_ga4_social_traffic("YOUR_GA4_PROPERTY_ID")
 # print(ga4_df.head())
+
+def load_manual_ga4_csv(filepath):
+    # The 'comment' parameter tells Pandas to ignore any line starting with '#'
+    # This automatically skips Google's 9 lines of metadata at the top!
+    df = pd.read_csv(filepath, comment='#')
+    
+    # Optional: Rename the columns so they match what our earlier Python script expects
+    df = df.rename(columns={
+        'Session campaign': 'Campaign',
+        'Session source / medium': 'Source/Medium',
+        'Sessions': 'Sessions',
+        'Engaged sessions': 'Engaged Sessions'
+    })
+    
+    return df
+
+# Test it out!
+manual_df = load_manual_ga4_csv('Traffic_acquisition_Session_campaign.csv')
+
+print("✅ Successfully loaded manual GA4 data!")
+print(manual_df[['Campaign', 'Source/Medium', 'Sessions', 'Engaged Sessions']].head())
