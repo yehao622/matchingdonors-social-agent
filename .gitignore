@@ -1,6 +1,6 @@
 node_modules/
 .env
-data/
+data/*.*
 dist/
 
 gateway/build/
@@ -10,3 +10,5 @@ gateway/bin/
 
 *.crt
 *.key
+
+*.csv
