@@ -59,5 +59,7 @@ export const api = {
   publishPost: (posts: string[], sourceName: string, url: string, title: string) => fetchWrapper('/publish', {
     method: 'POST',
     body: JSON.stringify({ posts, sourceName, url, title }),
-  })
+  }),
+
+  getAnalytics: () => fetchWrapper('/analytics')
 };

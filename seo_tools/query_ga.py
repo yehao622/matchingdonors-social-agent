@@ -72,3 +72,4 @@ if __name__ == "__main__":
         # Run our specific analytics models
         extract_core_button_metrics(ga4_data)
         analyze_overall_traffic(ga4_data)
+        ga4_data.to_json('../analytics_output.json', orient='records')
