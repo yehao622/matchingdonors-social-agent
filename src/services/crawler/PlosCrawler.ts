@@ -1,11 +1,12 @@
 import axios from 'axios';
+import { BaseCrawler } from './BaseCrawler.js';
 
-export class PlosCrawler {
+export class PlosCrawler extends BaseCrawler {
     public async crawlRandomArticle() {
         // Search PLOS for organ transplant, requesting JSON format (wt=json) and specific fields (fl=id,title,abstract)
         const url = `http://api.plos.org/search?q=title:"organ transplant"&wt=json&fl=id,title,abstract&rows=10`;
-        const res = await axios.get(url);
-        const docs = res.data.response.docs;
+        const res = await this.fetchApiJson(url);
+        const docs = res.response?.docs;
 
         if (!docs || docs.length === 0) throw new Error('No PLOS articles found.');
 

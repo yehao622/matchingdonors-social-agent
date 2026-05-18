@@ -1,11 +1,12 @@
 import axios from 'axios';
+import { BaseCrawler } from './BaseCrawler.js';
 
-export class PubMedCrawler {
+export class PubMedCrawler extends BaseCrawler {
     public async crawlRandomArticle() {
         // 1. Search for recent organ transplant articles and get JSON back
         const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term="organ transplant"&retmode=json&retmax=10`;
-        const searchRes = await axios.get(searchUrl);
-        const ids = searchRes.data.esearchresult.idlist; // Array of PMIDs
+        const searchRes = await this.fetchApiJson(searchUrl);
+        const ids = searchRes.esearchresult.idlist;
 
         if (!ids || ids.length === 0) throw new Error('No PubMed articles found.');
 
@@ -14,8 +15,8 @@ export class PubMedCrawler {
 
         // 2. Fetch the summary for that specific ID
         const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${randomId}&retmode=json`;
-        const summaryRes = await axios.get(summaryUrl);
-        const articleData = summaryRes.data.result[randomId]; //
+        const summaryRes = await this.fetchApiJson(summaryUrl);
+        const articleData = summaryRes.result[randomId];
 
         return {
             title: articleData.title,

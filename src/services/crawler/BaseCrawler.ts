@@ -12,6 +12,8 @@ export interface ScrapedArticle {
 export abstract class BaseCrawler {
     protected baseUrl: string;
     protected timeout: number = 20000;
+    protected maxRetries: number = 3;
+    protected baseDelayMs: number = 2000;
     protected userAgent: string = 'MatchingDonors-ContentAgent-Demo';
 
     constructor(baseUrl: string) {
@@ -21,7 +23,12 @@ export abstract class BaseCrawler {
     abstract extractArticleLinks(html: string): string[];
     abstract extractArticleContent(html: string, url: string): Partial<ScrapedArticle>;
 
-    protected async fetchHtml(url: string): Promise<string> {
+    // Helper to pause execution
+    protected sleep(ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    protected async fetchHtml(url: string, retries: number = 0): Promise<string> {
         try {
             const response = await axios.get(url, {
                 headers: {
@@ -35,8 +42,46 @@ export abstract class BaseCrawler {
                 maxRedirects: 5,
             });
             return response.data;
-        } catch (error) {
-            console.error(`✗ Error fetching ${url}`);
+        } catch (error: any) {
+            const status = error.response?.status;
+            
+            // Check if error is retryable (429 Rate Limit, or 5xx Server Error, or Timeout)
+            const isRetryable = status === 429 || (status >= 500 && status < 600) || error.code === 'ECONNABORTED';
+
+            if (isRetryable && retries < this.maxRetries) {
+                // Calculate exponential backoff (2s, 4s, 8s) + a little random "jitter" so we don't spam exact seconds
+                const jitter = Math.floor(Math.random() * 500);
+                const waitTime = (this.baseDelayMs * Math.pow(2, retries)) + jitter;
+                
+                console.warn(`⚠️ Rate limited or server error fetching ${url} (Status: ${status}). Retrying in ${(waitTime / 1000).toFixed(1)}s... (Attempt ${retries + 1}/${this.maxRetries})`);
+                
+                await this.sleep(waitTime);
+                return this.fetchHtml(url, retries + 1); // Recursive retry
+            }
+
+            console.error(`✗ Fatal Error fetching ${url} after ${retries} retries.`);
+            throw error;
+        }
+    }
+
+    protected async fetchApiJson(url: string, retries: number = this.maxRetries, baseDelay: number = this.baseDelayMs): Promise<any> {
+        try {
+            // Standard API fetch without the heavy HTML headers
+            const response = await axios.get(url, { timeout: this.timeout });
+            return response.data; // Return the parsed JSON
+        } catch (error: any) {
+            const status = error.response?.status;
+            
+            if ((status === 429 || (status >= 500 && status < 600)) && retries > 0) {
+                const hostname = new URL(url).hostname; // Extract 'api.plos.org' or 'eutils.ncbi.nlm.nih.gov'
+                const jitter = Math.floor(Math.random() * 500);
+                const waitTime = baseDelay + jitter;
+                
+                console.warn(`⚠️ API Rate Limit hit on [${hostname}]. Retrying in ${(waitTime/1000).toFixed(1)}s...`);
+                
+                await this.sleep(waitTime);
+                return this.fetchApiJson(url, retries - 1, baseDelay * 2); // Recursive retry
+            }
             throw error;
         }
     }
