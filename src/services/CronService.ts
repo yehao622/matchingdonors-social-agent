@@ -15,6 +15,14 @@ class CronService {
 
     private isProcessing: boolean = false;
 
+    private targetSeoKeywords: string[] = [
+        "kidney donor match",
+        "find a living donor",
+        "organ transplant resources",
+        "how to find a kidney donor match"
+    ];
+    private keywordIndex: number = 0;
+
     public start() {
         if (this.isRunning) return;
         this.isRunning = true;
@@ -91,6 +99,10 @@ class CronService {
             const proceedDraft = await this.smartDelay(30);
             if (!proceedDraft) return;
 
+            const trendingSEOKeyword = this.targetSeoKeywords[this.keywordIndex] || "organ donation";
+            console.log(`Injecting GSC Target Keyword: "${trendingSEOKeyword}"`);
+            this.keywordIndex = (this.keywordIndex + 1) % this.targetSeoKeywords.length;
+
             // Draft with Gemini
             this.currentStatus = `${prefix} Drafting with Gemini...`;
 
@@ -98,7 +110,7 @@ class CronService {
             const safeTitle = article.title || 'Medical News';
             const safeExcerpt = article.excerpt || '';
 
-            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, finalUrl)) || [];
+            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, finalUrl, trendingSEOKeyword)) || [];
             if (posts.length === 0) {
                 console.log('⚠️ Gemini returned no posts. Skipping to next cycle.');
                 this.currentStatus = 'Skipped: No drafts generated.';
@@ -132,7 +144,7 @@ class CronService {
             if (validPosts.some(p => p.length > 300)) {
                 console.log(`⚠️ Aborting publish: Some posts are still over 300 chars after condensing.`);
                 this.currentStatus = 'Skipped: Posts exceeded character limits. Will retry later.';
-                // We return immediately! The thread is NOT published, and History is NOT saved!
+                // Return immediately! The thread is NOT published, and History is NOT saved!
                 return;
             }
 
