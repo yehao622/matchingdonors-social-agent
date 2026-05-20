@@ -34,7 +34,7 @@ async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
     return '';
 }
 
-export async function generateInitialDraft(title: string, summary: string, url: string, seoKeyword: string): Promise<string[]> {
+export async function generateInitialDraft(title: string, summary: string, url: string, seoKeyword: string, performanceHint: string = ""): Promise<string[]> {
     const generalTrackingUrl = "https://matchingdonors.com/life/?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_thread";
     const shortGeneralUrl = await shortenUrl(generalTrackingUrl);
 
@@ -47,9 +47,8 @@ export async function generateInitialDraft(title: string, summary: string, url: 
         2. TONE & TAGS: Be highly empathetic. Include hashtags like #OrganDonation and #MatchingDonors.
         3. GENERAL CTA: Every post in the thread EXCEPT the last one MUST end with this exact raw URL: ${shortGeneralUrl}
         4. The last post must include a call to action with this link: ${url}
-        5. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical and empathetic sense given the article's topic.
-           If it naturally fits (or can be smoothly related as a broader example), weave it into the first post.
-           If it completely clashes with the medical context (e.g., forcing a kidney keyword into a heart disease article), IGNORE the keyword entirely. Do not force it.
+        5. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical and empathetic sense given the article's topic. If it fits naturally, weave it into the first post. If it clashes, ignore it.
+        ${performanceHint ? `6. ANALYTICS FEEDBACK: ${performanceHint}` : ''}
         
         Article Title: ${title}
         Article Summary: ${summary}

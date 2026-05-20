@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import cron from 'node-cron';
 import { crawlerManager } from './CrawlerManager.js';
 import { generateInitialDraft, condensePost } from './aiService.js';
@@ -72,6 +74,39 @@ class CronService {
         return this.isRunning;
     }
 
+    // Read GA4 data to find the best topic ---
+    private getPerformanceHint(): string {
+        try {
+            const filePath = path.resolve(process.cwd(), 'analytics_output.json');
+
+            if (!fs.existsSync(filePath)) {
+                return ""; // If the file doesn't exist yet, just return nothing
+            }
+
+            const rawData = fs.readFileSync(filePath, 'utf-8');
+            const data = JSON.parse(rawData);
+
+            // Filter out general page views and "(not set)" rows to only get explicit button clicks
+            const buttonClicks = data.filter((row: any) =>
+                row["Event name"] === "core_button_link_click" &&
+                row["Button Name"] &&
+                row["Button Name"] !== "(not set)"
+            );
+
+            if (buttonClicks.length > 0) {
+                // Sort to find the button with the highest "Event count"
+                const topActionRow = buttonClicks.sort((a: any, b: any) => b["Event count"] - a["Event count"])[0];
+                const targetAction = topActionRow["Button Name"];
+
+                // Return the specific psychological hint to Gemini
+                return `Our analytics show that website visitors are currently highly engaged with the "${targetAction}" feature. Try to subtly frame the emotional angle or call-to-action of this post to encourage readers to explore that specific area of the site.`;
+            }
+        } catch (error) {
+            console.error("⚠️ Failed to read analytics feedback:", error);
+        }
+        return "";
+    }
+
     // This is the fully automated pipeline (No humans required!)
     private async runWorkflow() {
         this.currentStatus = 'Crawling for an article...';
@@ -103,6 +138,12 @@ class CronService {
             console.log(`Injecting GSC Target Keyword: "${trendingSEOKeyword}"`);
             this.keywordIndex = (this.keywordIndex + 1) % this.targetSeoKeywords.length;
 
+            // Grab the Analytics Feedback ---
+            const performanceHint = this.getPerformanceHint();
+            if (performanceHint) {
+                console.log(`Injecting GA4 Success Bias based on historical data!`);
+            }
+
             // Draft with Gemini
             this.currentStatus = `${prefix} Drafting with Gemini...`;
 
@@ -110,7 +151,7 @@ class CronService {
             const safeTitle = article.title || 'Medical News';
             const safeExcerpt = article.excerpt || '';
 
-            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, finalUrl, trendingSEOKeyword)) || [];
+            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, finalUrl, trendingSEOKeyword, performanceHint)) || [];
             if (posts.length === 0) {
                 console.log('⚠️ Gemini returned no posts. Skipping to next cycle.');
                 this.currentStatus = 'Skipped: No drafts generated.';

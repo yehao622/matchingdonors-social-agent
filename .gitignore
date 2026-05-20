@@ -12,3 +12,5 @@ gateway/bin/
 *.key
 
 *.csv
+
+analytics_output.json
