@@ -17,12 +17,12 @@ export class CrawlerManager {
     constructor() {
         // Register all available sources here!
         this.crawlers = [
-            new OptnCrawler(),
-            new DailyTransplantCrawler(),
-            new IrishTransplantCrawler(),
-            new DailyDiabetesCrawler(),
-            new PubMedCrawler(),
-            new PlosCrawler()
+            // new OptnCrawler(),
+            // new DailyTransplantCrawler(),
+            // new IrishTransplantCrawler(),
+            new DailyDiabetesCrawler()
+            // new PubMedCrawler(),
+            // new PlosCrawler()
         ];
     }
 

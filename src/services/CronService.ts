@@ -30,7 +30,7 @@ class CronService {
         this.isRunning = true;
         this.currentStatus = 'Cron Engine Started! Waiting for next cycle...';
 
-        this.task = cron.schedule('* * * * *', async () => {
+        this.task = cron.schedule('*/15 * * * *', async () => {
             // THE LOCK: If a workflow is already running, skip this minute!
             if (this.isProcessing) {
                 console.log('⏳ Previous cycle is still running. Skipping this minute to prevent overlap.');

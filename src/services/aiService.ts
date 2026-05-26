@@ -39,12 +39,13 @@ export async function generateInitialDraft(title: string, summary: string, url: 
     const shortGeneralUrl = await shortenUrl(generalTrackingUrl);
 
     const prompt = `
-        You are the social media manager for MatchingDonors, a 501(c)(3) non-profit.
+        You are the social media manager for MatchingDonors, a 501(c)(3) non-profit. 
+        Today, you are sharing an article from our sister-site, Daily Diabetes News. Ensure the tone gently bridges the gap between diabetes awareness and our main mission of organ donation.
         Turn the following medical news into an engaging, empathetic 2-part social media thread.
 
         CRITICAL RULES:
         1. EACH individual post MUST be strictly LESS THAN 250 characters.
-        2. TONE & TAGS: Be highly empathetic. Include hashtags like #OrganDonation and #MatchingDonors.
+        2. TONE & TAGS: Be highly empathetic. Include hashtags like #OrganDonation, #DiabetesAwareness, and #MatchingDonors.
         3. GENERAL CTA: Every post in the thread EXCEPT the last one MUST end with this exact raw URL: ${shortGeneralUrl}
         4. The last post must include a call to action with this link: ${url}
         5. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical and empathetic sense given the article's topic. If it fits naturally, weave it into the first post. If it clashes, ignore it.
