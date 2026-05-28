@@ -8,7 +8,11 @@ This system operates as a bridge between internal content generation and externa
 ## Key Features
 Autonomous Cron Engine: A background node-cron pipeline that handles the entire lifecycle: scraping, URL shortening, AI drafting, auto-condensing, publishing, and database logging.
 
+Deep XML Sitemap Crawling: Features an abstract CrawlerManager running custom web scrapers targeting primary medical sources, utilizing high-efficiency XML sitemap parsing (bypassing shallow HTML pagination) for deep historical content discovery.
+
 Human-in-the-Loop "Draft Studio": A React-based interface allowing humans to take manual control of any crawler. It features a synchronized 30-second "Ghost Timer" that auto-publishes if no human edits are detected.
+
+Analytics & SEO Data Pipeline: A dedicated Python data extraction layer (/seo_tools) that processes case-sensitive GA4 Custom Dimensions and Google Search Console metrics to feed performance data back into the AI generation loop.
 
 Traffic Analytics & Reporting: A built-in dashboard featuring interactive recharts visualizations to track inbound vs. outbound widget traffic, along with a 1-click .csv export tool for stakeholder reporting.
 
@@ -39,15 +43,20 @@ A modern React application built with Vite and TypeScript.
 * **Dashboard:** Allows manual overrides, system monitoring, and CSV report exporting.
 * **Isolated Widget (`?mode=widget`):** A CSS-Module scoped, standalone feed designed to be embedded via `iframe` directly into the Soledad WordPress theme without CSS conflicts.
 
+### 4. Data Engineering Pipeline (/seo_tools)
+Python scripts designed to sanitize and ingest tracking data, preparing the system for reinforcement-learning content optimization.
+
 ## 📂 Repository Structure
 ```text
 ├── client/                 # React frontend (Dashboard & WP Widget)
 ├── data/                   # SQLite database (History & Logs)
 ├── gateway/                # C++ Zero-Trust API Gateway WAF
 ├── k8s/                    # Kubernetes deployment manifests
+├── seo_tools/              # Python GA4/GSC analytics extraction scripts
 ├── src/                    # Node.js Core Engine (Crawlers & AI)
 ├── docker-compose.yml      # Local orchestration environment
 └── Dockerfile              # Node.js build instructions
+```
 
 🛠️ Tech Stack
 Backend & AI Pipeline
@@ -57,12 +66,12 @@ AI Provider: Google Gemini API (gemini-2.5-flash)
 Database (Dual-Engine): PostgreSQL (Production/Swarm) & SQLite (Local fallback)
 Automation: Node-Cron
 Frontend Dashboard
-Framework: React 18, Vite
-Data Visualization: Recharts
-Styling: Tailwind CSS v4
+  - Framework: React 18, Vite
+  - Data Visualization: Recharts
+  - Styling: Tailwind CSS v4
 DevOps & Deployment
-Containerization: Docker & Docker Compose
-Orchestration: Kubernetes (K8s / Minikube)
+  - Containerization: Docker & Docker Compose
+  - Orchestration: Kubernetes (K8s / Minikube)
 
 🚀 Getting Started (Local Development)
 1. Environment Variables. Create a .env file in the root directory of the project and add the following keys:
@@ -148,6 +157,6 @@ If "Take Control" is clicked: The frontend sends a kill switch command to the ba
 
 Public "Widget Mode" (Embeddable UI): The React frontend includes a stealth Widget Mode designed to be embedded securely on public-facing websites (like the MatchingDonors homepage) without exposing the administrative controls.
 
-SEO Optimized: The widget displays clickable, highly descriptive article titles rather than raw URLs to boost page authority.
+SEO Optimized: Clicks are tracked via UTM parameters, parsed by the Python GA4 scripts, and fed back into the system to measure engagement.
 
 📝 License: This project was developed for the MatchingDonors 501(c)(3) organization.
