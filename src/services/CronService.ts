@@ -125,9 +125,11 @@ class CronService {
             if (!proceed1) return; // Abort if human intervened!
 
             // Shorten URL
-            this.currentStatus = `${prefix} Shortening URL...`;
-            const trackingString = `?utm_source=bluesky&utm_medium=social&utm_campaign=ai_${encodeURIComponent(article.sourceName.replace(/\s+/g, '_'))}`;
-            const finalUrl = await shortenUrl(article.url + trackingString);
+            // this.currentStatus = `${prefix} Shortening URL...`;
+            // const archetypes = ['patient_empathy', 'data_journalist', 'expert_insight', 'myth_buster', 'curiosity_gap'];
+            // const selectedArchetype = archetypes[Math.floor(Math.random() * archetypes.length)];
+            // const trackingString = `?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_${selectedArchetype}`;
+            // const finalUrl = await shortenUrl(article.url + trackingString);
 
             // 60-second delay to protect gemini api
             this.currentStatus = `${prefix} ⏳ Waiting 30s to avoid Gemini API rate limits...`;
@@ -151,7 +153,7 @@ class CronService {
             const safeTitle = article.title || 'Medical News';
             const safeExcerpt = article.excerpt || '';
 
-            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, finalUrl, trendingSEOKeyword, performanceHint)) || [];
+            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, article.url, trendingSEOKeyword, performanceHint)) || [];
             if (posts.length === 0) {
                 console.log('⚠️ Gemini returned no posts. Skipping to next cycle.');
                 this.currentStatus = 'Skipped: No drafts generated.';
@@ -159,14 +161,25 @@ class CronService {
             }
 
             // Auto-Fix any posts that exceed 300 characters
-            this.currentStatus = `${prefix} Condensing long posts...`;
-            for (let i = 0; i < posts.length; i++) {
-                const currentPost = posts[i];
+            this.currentStatus = `${prefix} Optimizing and shortening embedded links...`;
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
 
-                if (currentPost && currentPost.length > 300) {
-                    console.log(`⚙️ Cron Engine: Condensing post ${i + 1}...`);
-                    const newText = await condensePost(currentPost, 'Make it more concise under 200 chars.');
-                    if (newText) posts[i] = newText;
+            for (let i = 0; i < posts.length; i++) {
+                let postText = posts[i];
+                if (!postText) continue;
+
+                const foundUrls = postText.match(urlRegex);
+
+                if (foundUrls) {
+                    for (const longUrl of foundUrls) {
+                        try {
+                            const shortUrl = await shortenUrl(longUrl);
+                            postText = postText.replace(longUrl, shortUrl);
+                        } catch (err) {
+                            console.error(`⚠️ Failed to shorten URL: ${longUrl}`, err);
+                        }
+                    }
+                    posts[i] = postText;
                 }
             }
 

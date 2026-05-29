@@ -1,5 +1,4 @@
 import { GoogleGenAI } from '@google/genai';
-import { shortenUrl } from './urlService.js'
 
 let genAI: GoogleGenAI | null = null;
 
@@ -34,49 +33,61 @@ async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
     return '';
 }
 
-export async function generateInitialDraft(title: string, summary: string, url: string, seoKeyword: string, performanceHint: string = ""): Promise<string[]> {
-    const generalTrackingUrl = "https://matchingdonors.com/life/?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_thread";
-    const shortGeneralUrl = await shortenUrl(generalTrackingUrl);
+export async function generateInitialDraft(title: string, summary: string, rawUrl: string, seoKeyword: string, performanceHint: string = ""): Promise<string[]> {
+
+    const includeLink = Math.random() < 0.70;
 
     const prompt = `
-        You are the social media manager for MatchingDonors, a 501(c)(3) non-profit. 
-        Today, you are sharing an article from our sister-site, Daily Diabetes News. Ensure the tone gently bridges the gap between diabetes awareness and our main mission of organ donation.
-        Turn the following medical news into an engaging, empathetic 2-part social media thread.
+        You are an expert social media manager for MatchingDonors, a 501(c)(3) non-profit. 
+        Analyze the article context and automatically adopt the single best tone archetype:
+        - 'patient_empathy': Use if it's a touching personal story or patient-focused narrative.
+        - 'data_journalist': Use if it's heavy data, statistical updates, or numerical trends.
+        - 'expert_insight': Use if it's a clinical trial, research study, or medical breakthrough.
+        - 'myth_buster': Use if it's debunking a health misconception or an educational explainer.
+        - 'curiosity_gap': Use for general news where withholding a summary detail drives interest.
+
+        Turn this medical news into an engaging 1-part or 2-part social media thread.
 
         CRITICAL RULES:
-        1. EACH individual post MUST be strictly LESS THAN 250 characters.
-        2. TONE & TAGS: Be highly empathetic. Include hashtags like #OrganDonation, #DiabetesAwareness, and #MatchingDonors.
-        3. GENERAL CTA: Every post in the thread EXCEPT the last one MUST end with this exact raw URL: ${shortGeneralUrl}
-        4. The last post must include a call to action with this link: ${url}
-        5. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical and empathetic sense given the article's topic. If it fits naturally, weave it into the first post. If it clashes, ignore it.
-        ${performanceHint ? `6. ANALYTICS FEEDBACK: ${performanceHint}` : ''}
+        1. LENGTH: EACH individual post MUST be strictly LESS THAN 250 characters.
+        2. HASHTAGS: DO NOT use generic hashtags like #OrganDonation or #DiabetesAwareness. Instead, generate 1 or 2 highly specific, long-tail hashtags based on the exact medical condition, drug name, or therapy mentioned in the text.
+        ${includeLink ? `
+        3. LINKS & UTMS: You must embed tracking parameters into your links using your selected archetype string (e.g., if you choose 'patient_empathy', use 'ai_agent_patient_empathy').
+           - The final post in your thread MUST end with this specific article URL format: ${rawUrl}?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_[SELECTED_ARCHETYPE]
+           - If the thread has multiple parts, the first part MUST end with this general URL format: https://matchingdonors.com/life/?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_[SELECTED_ARCHETYPE]_general
+        ` : `
+        3. LINKS: DO NOT INCLUDE ANY URLS OR LINKS IN THIS THREAD. This is a purely educational, native engagement post. End the final post with a thought-provoking question instead of a call-to-action link.
+        `}
+        4. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical sense given the article's topic. If it fits naturally, weave it into the first post.
+        ${performanceHint ? `5. ANALYTICS FEEDBACK: ${performanceHint}` : ''}
         
         Article Title: ${title}
         Article Summary: ${summary}
 
-        OUTPUT STRICTLY AS A JSON ARRAY OF STRINGS. No markdown, no extra text.
+        OUTPUT FORMAT: You must return ONLY a flat JSON array of strings. Example: ["text 1", "text 2"]. Do not write anything outside the JSON array block.
     `;
 
     let text = await askGemini(prompt);
 
     try {
-        // Find the first '[' and the last ']'
         const start = text.indexOf('[');
         const end = text.lastIndexOf(']');
-
-        if (start === -1 || end === -1) {
-            throw new Error("Gemini did not return a valid array.");
-        }
+        if (start === -1 || end === -1) throw new Error("Invalid array boundaries.");
 
         const jsonString = text.substring(start, end + 1);
-        return JSON.parse(jsonString);
+        const parsed = JSON.parse(jsonString);
 
+        if (Array.isArray(parsed)) {
+            return parsed.map(item => String(item));
+        } else if (parsed && typeof parsed === 'object' && parsed.posts) {
+            return Array.isArray(parsed.posts) ? parsed.posts.map(String) : [String(parsed.posts)];
+        }
+        throw new Error("Invalid JSON structure.");
     } catch (error) {
         console.error("⚠️ Failed to parse Gemini response:", text);
-        // Fallback to avoid crashing the bot: return a safe default
-        return [
-            `Medical News Update regarding ${seoKeyword}: ${title} #OrganDonation #TransplantNews\n\nRead more: ${url}`
-        ];
+        return includeLink
+            ? [`Medical News Update: ${title}\n\nRead more: ${rawUrl}?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_fallback`]
+            : [`Interesting medical insights regarding ${title}. What are your thoughts on this development?`];
     }
 }
 
