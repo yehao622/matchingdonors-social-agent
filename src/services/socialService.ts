@@ -4,7 +4,53 @@ const bskyAgent = new AtpAgent({ service: 'https://bsky.social' });
 
 let isAuthenticated = false;
 
-export async function publishThreadToBluesky(posts: string[]): Promise<void> {
+// CronService constructs these; socialService merges them with auto-detected facets.
+export interface BlueskyPost {
+    text: string;
+    linkFacets?: Array<{
+        label: string;   // The exact label substring that appears in `text`
+        uri: string;     // The full UTM URL to attach behind that label
+    }>;
+}
+
+// Using TextEncoder ensures emoji or non-ASCII chars don't shift offsets.
+function buildLinkFacet(fullText: string, label: string, uri: string): object | null {
+    const encoder = new TextEncoder();
+    const textBytes = encoder.encode(fullText);
+    const labelBytes = encoder.encode(label);
+
+    // Find the byte offset of the label inside the full text
+    const fullByteStr = Buffer.from(textBytes);
+    const labelByteStr = Buffer.from(labelBytes);
+
+    let byteStart = -1;
+    for (let i = 0; i <= fullByteStr.length - labelByteStr.length; i++) {
+        if (fullByteStr.slice(i, i + labelByteStr.length).equals(labelByteStr)) {
+            byteStart = i;
+            break;
+        }
+    }
+
+    if (byteStart === -1) {
+        console.warn(`⚠️ socialService: Could not find label "${label}" in post text. Skipping facet.`);
+        return null;
+    }
+
+    return {
+        index: {
+            byteStart,
+            byteEnd: byteStart + labelByteStr.length,
+        },
+        features: [
+            {
+                $type: 'app.bsky.richtext.facet#link',
+                uri,
+            },
+        ],
+    };
+}
+
+export async function publishThreadToBluesky(posts: BlueskyPost[]): Promise<void> {
     // NEW: Only log in if we haven't already!
     if (!isAuthenticated) {
         await bskyAgent.login({
@@ -20,14 +66,26 @@ export async function publishThreadToBluesky(posts: string[]): Promise<void> {
     let postedCount = 0;
 
     try {
-        for (const text of posts) {
-            const rt = new RichText({ text });
-            await rt.detectFacets(bskyAgent);
+        for (const postObj of posts) {
+            const rt = new RichText({ text: postObj.text });
+            await rt.detectFacets(bskyAgent);  // Auto-detect #hashtags and @mentions
+
+            // Build manual link facets (e.g. "Read More" → full UTM URL)
+            const manualFacets: object[] = [];
+            if (postObj.linkFacets && postObj.linkFacets.length > 0) {
+                for (const { label, uri } of postObj.linkFacets) {
+                    const facet = buildLinkFacet(postObj.text, label, uri);
+                    if (facet) manualFacets.push(facet);
+                }
+            }
+
+            // Merge: auto-detected facets + our manual link facets
+            const mergedFacets = [...(rt.facets || []), ...manualFacets];
 
             const postRecord: any = {
                 $type: 'app.bsky.feed.post',
                 text: rt.text,
-                facets: rt.facets,
+                facets: mergedFacets.length > 0 ? mergedFacets : undefined,
                 createdAt: new Date().toISOString(),
             };
 

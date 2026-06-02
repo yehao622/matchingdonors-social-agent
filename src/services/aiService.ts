@@ -33,38 +33,47 @@ async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
     return '';
 }
 
-export async function generateInitialDraft(title: string, summary: string, rawUrl: string, seoKeyword: string, performanceHint: string = ""): Promise<string[]> {
-
-    const includeLink = Math.random() < 0.70;
+export async function generateInitialDraft(
+    title: string,
+    summary: string,
+    seoKeyword: string,
+    performanceHint: string = "",
+    isTwoPart?: boolean
+): Promise<{ text: string, code: string }[]> {
+    // Note: rawUrl is removed from arguments since Node handles it now.
 
     const prompt = `
         You are an expert social media manager for MatchingDonors, a 501(c)(3) non-profit. 
-        Analyze the article context and automatically adopt the single best tone archetype:
-        - 'patient_empathy': Use if it's a touching personal story or patient-focused narrative.
-        - 'data_journalist': Use if it's heavy data, statistical updates, or numerical trends.
-        - 'expert_insight': Use if it's a clinical trial, research study, or medical breakthrough.
-        - 'myth_buster': Use if it's debunking a health misconception or an educational explainer.
-        - 'curiosity_gap': Use for general news where withholding a summary detail drives interest.
+        Analyze the article context and automatically adopt the single best tone archetype. 
+        Each archetype has a specific 6-character tracking CODE:
+        - Patient Empathy (CODE: ai_patientStory): Touching personal story or patient-focused narrative.
+        - Data Journalist (CODE: ai_Data): Heavy data, statistical updates, or numerical trends.
+        - Expert Insight (CODE: ai_expertInsight): Clinical trial, research study, or medical breakthrough.
+        - Myth Buster (CODE: ai_education): Debunking a health misconception or educational explainer.
+        - Curiosity Gap (CODE: ai_general): General news where withholding a summary detail drives interest.
 
-        Turn this medical news into an engaging 1-part or 2-part social media thread.
+        Turn this medical news into an engaging 1-part or 2-part social media thread. DO NOT generate more than 2 posts.
 
         CRITICAL RULES:
-        1. LENGTH: EACH individual post MUST be strictly LESS THAN 250 characters.
-        2. HASHTAGS: DO NOT use generic hashtags like #OrganDonation or #DiabetesAwareness. Instead, generate 1 or 2 highly specific, long-tail hashtags based on the exact medical condition, drug name, or therapy mentioned in the text.
-        ${includeLink ? `
-        3. LINKS & UTMS: You must embed tracking parameters into your links using your selected archetype string (e.g., if you choose 'patient_empathy', use 'ai_agent_patient_empathy').
-           - The final post in your thread MUST end with this specific article URL format: ${rawUrl}?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_[SELECTED_ARCHETYPE]
-           - If the thread has multiple parts, the first part MUST end with this general URL format: https://matchingdonors.com/life/?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_[SELECTED_ARCHETYPE]_general
-        ` : `
-        3. LINKS: DO NOT INCLUDE ANY URLS OR LINKS IN THIS THREAD. This is a purely educational, native engagement post. End the final post with a thought-provoking question instead of a call-to-action link.
-        `}
-        4. SEO INJECTION: Evaluate if the target SEO phrase "${seoKeyword}" makes logical sense given the article's topic. If it fits naturally, weave it into the first post.
-        ${performanceHint ? `5. ANALYTICS FEEDBACK: ${performanceHint}` : ''}
+        1. LENGTH: EACH post MUST be under 250 characters.
+        2. HASHTAGS: Generate 1 or 2 highly specific, long-tail hashtags.
+        3. NO LINKS: DO NOT INCLUDE ANY URLS. Focus ONLY on the engaging text. The system will append URLs automatically.
+        4. SEO INJECTION: If the phrase "${seoKeyword}" fits naturally, weave it into the first post.
+        ${isTwoPart ? `5. TWO-PART STRUCTURE: You MUST write exactly 2 posts. Post 1 covers the news angle from the article. 
+            Post 2 must naturally bridge to MatchingDonors — e.g. mention that patients can find living donors, that matching is free,
+            or that hope is available. Make the bridge feel like a genuine editorial follow-up, NOT an advertisement. Both posts must still be under 150 chars each.` :
+            ''}
+        ${performanceHint ? `${isTwoPart ? '6' : '5'}. ANALYTICS FEEDBACK: ${performanceHint}` : ''}
         
         Article Title: ${title}
         Article Summary: ${summary}
 
-        OUTPUT FORMAT: You must return ONLY a flat JSON array of strings. Example: ["text 1", "text 2"]. Do not write anything outside the JSON array block.
+        OUTPUT FORMAT: Return ONLY a flat JSON array of objects. Example: 
+        [
+          {"text": "Your engaging post text here #hashtag", "code": "ai_patientStory"},
+          {"text": "Second part of the thread here #hashtag2", "code": "ai_patientStory"}
+        ]
+        Do not write anything outside the JSON array block.
     `;
 
     let text = await askGemini(prompt);
@@ -77,17 +86,18 @@ export async function generateInitialDraft(title: string, summary: string, rawUr
         const jsonString = text.substring(start, end + 1);
         const parsed = JSON.parse(jsonString);
 
-        if (Array.isArray(parsed)) {
-            return parsed.map(item => String(item));
-        } else if (parsed && typeof parsed === 'object' && parsed.posts) {
-            return Array.isArray(parsed.posts) ? parsed.posts.map(String) : [String(parsed.posts)];
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].text) {
+            return parsed.map((item: any) => ({
+                text: String(item.text).trim(),
+                code: String(item.code || 'ai_general') // fallback code just in case
+            }));
         }
         throw new Error("Invalid JSON structure.");
     } catch (error) {
         console.error("⚠️ Failed to parse Gemini response:", text);
-        return includeLink
-            ? [`Medical News Update: ${title}\n\nRead more: ${rawUrl}?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_fallback`]
-            : [`Interesting medical insights regarding ${title}. What are your thoughts on this development?`];
+        return [
+            { text: `Medical News Update: ${title}`, code: 'ai_general' }
+        ];
     }
 }
 

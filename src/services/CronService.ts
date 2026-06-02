@@ -3,8 +3,7 @@ import path from 'path';
 import cron from 'node-cron';
 import { crawlerManager } from './CrawlerManager.js';
 import { generateInitialDraft, condensePost } from './aiService.js';
-import { publishThreadToBluesky } from './socialService.js';
-import { shortenUrl } from './urlService.js';
+import { publishThreadToBluesky, BlueskyPost } from './socialService.js';
 import { historyService } from './HistoryService.js';
 
 class CronService {
@@ -25,12 +24,46 @@ class CronService {
     ];
     private keywordIndex: number = 0;
 
+    // Tracks how many posts have been published today, resets at midnight
+    private dailyPostCount: number = 0;
+    private lastResetDate: string = '';
+    // Stored as [hour, minute] pairs — asymmetric to feel human
+    private readonly DAILY_SCHEDULE: [number, number][] = [
+        [9, 7],   // 9:07 AM
+        [11, 23], // 11:23 AM
+        [13, 41], // 1:41 PM
+        [15, 5],  // 3:05 PM
+        [17, 52], // 5:52 PM
+    ];
+    private readonly MAX_POSTS_PER_DAY = 5;
+
     public start() {
         if (this.isRunning) return;
         this.isRunning = true;
         this.currentStatus = 'Cron Engine Started! Waiting for next cycle...';
 
-        this.task = cron.schedule('*/15 * * * *', async () => {
+        this.task = cron.schedule('* * * * *', async () => {
+            // Reset daily counter at midnight
+            const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+            if (this.lastResetDate !== today) {
+                this.dailyPostCount = 0;
+                this.lastResetDate = today;
+                console.log('Daily post counter reset.');
+            }
+
+            // Stop for the day once we hit the limit
+            if (this.dailyPostCount >= this.MAX_POSTS_PER_DAY) {
+                this.currentStatus = `✅ Daily limit reached (${this.MAX_POSTS_PER_DAY} posts). Resuming tomorrow.`;
+                return;
+            }
+
+            // Only fire at the exact scheduled [hour, minute] slots
+            const now = new Date();
+            const hh = now.getHours();
+            const mm = now.getMinutes();
+            const isScheduledSlot = this.DAILY_SCHEDULE.some(([h, m]) => h === hh && m === mm);
+            if (!isScheduledSlot) return;
+
             // THE LOCK: If a workflow is already running, skip this minute!
             if (this.isProcessing) {
                 console.log('⏳ Previous cycle is still running. Skipping this minute to prevent overlap.');
@@ -40,12 +73,14 @@ class CronService {
             this.isProcessing = true;
             try {
                 await this.runWorkflow();
+                this.dailyPostCount++;
+                console.log(`📊 Daily post count: ${this.dailyPostCount}/${this.MAX_POSTS_PER_DAY}`);
             } finally {
                 this.isProcessing = false; // Unlock the door when completely finished or if it crashes!
             }
         });
 
-        console.log('⏱️ Cron engine started!');
+        console.log('⏱️ Cron engine started! Posting 5x/day on working-hours schedule.');
     }
 
     public stop() {
@@ -124,13 +159,6 @@ class CronService {
             const proceed1 = await this.smartDelay(4);
             if (!proceed1) return; // Abort if human intervened!
 
-            // Shorten URL
-            // this.currentStatus = `${prefix} Shortening URL...`;
-            // const archetypes = ['patient_empathy', 'data_journalist', 'expert_insight', 'myth_buster', 'curiosity_gap'];
-            // const selectedArchetype = archetypes[Math.floor(Math.random() * archetypes.length)];
-            // const trackingString = `?utm_source=bluesky&utm_medium=social&utm_campaign=ai_agent_${selectedArchetype}`;
-            // const finalUrl = await shortenUrl(article.url + trackingString);
-
             // 60-second delay to protect gemini api
             this.currentStatus = `${prefix} ⏳ Waiting 30s to avoid Gemini API rate limits...`;
             const proceedDraft = await this.smartDelay(30);
@@ -152,9 +180,17 @@ class CronService {
             // Provide fallback strings just in case the crawler missed the title or excerpt
             const safeTitle = article.title || 'Medical News';
             const safeExcerpt = article.excerpt || '';
+            const isLinklessPost = Math.random() < 1 / 3;
+            const wantTwoPart = !isLinklessPost && Math.random() < 0.5;
 
-            let posts = (await generateInitialDraft(safeTitle, safeExcerpt, article.url, trendingSEOKeyword, performanceHint)) || [];
-            if (posts.length === 0) {
+            let drafts = (await generateInitialDraft(
+                safeTitle,
+                safeExcerpt,
+                trendingSEOKeyword,
+                performanceHint,
+                wantTwoPart
+            )) || [];
+            if (drafts.length === 0) {
                 console.log('⚠️ Gemini returned no posts. Skipping to next cycle.');
                 this.currentStatus = 'Skipped: No drafts generated.';
                 return;
@@ -162,29 +198,49 @@ class CronService {
 
             // Auto-Fix any posts that exceed 300 characters
             this.currentStatus = `${prefix} Optimizing and shortening embedded links...`;
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            for (let i = 0; i < drafts.length; i++) {
+                let postObj = drafts[i];
+                if (!postObj || !postObj.text) continue;
 
-            for (let i = 0; i < posts.length; i++) {
-                let postText = posts[i];
-                if (!postText) continue;
+                if (postObj.text.length > 300) {
+                    console.log(`⚙️ Cron Engine: Condensing base text of post ${i + 1}...`);
+                    const newText = await condensePost(postObj.text, 'Make it more concise, strictly under 300 chars.');
+                    if (newText) postObj.text = newText;
+                }
+            }
 
-                const foundUrls = postText.match(urlRegex);
+            const posts: BlueskyPost[] = [];
+            for (let i = 0; i < drafts.length; i++) {
+                const posts_tmp = drafts[i];
+                if (!posts_tmp || !posts_tmp.text) continue;
 
-                if (foundUrls) {
-                    for (const longUrl of foundUrls) {
-                        try {
-                            const shortUrl = await shortenUrl(longUrl);
-                            postText = postText.replace(longUrl, shortUrl);
-                        } catch (err) {
-                            console.error(`⚠️ Failed to shorten URL: ${longUrl}`, err);
-                        }
-                    }
-                    posts[i] = postText;
+                let { text, code } = posts_tmp;
+
+                if (isLinklessPost) {
+                    // Pure insight post — no URLs attached, no facets. Just the Gemini text + hashtags.
+                    posts.push({ text });
+                } else {
+                    // Post 1 of a 2-part thread → MatchingDonors label
+                    // Final post (1-of-1, or post 2 of 2) → source article label
+                    const isMatchingDonorsPost = drafts.length === 2 && i === 0;
+
+                    const linkLabel = isMatchingDonorsPost ? '→ MatchingDonors' : '→ Read Article';
+                    const linkUri = isMatchingDonorsPost
+                        ? `https://matchingdonors.com/life/?utm_source=bsky&utm_medium=soc&utm_campaign=${code}`
+                        : `${article.url}?utm_source=bsky&utm_medium=soc&utm_campaign=${code}`;
+
+                    // Visible post text: Gemini text + newline + short label
+                    const fullText = `${text}\n\n${linkLabel}`;
+
+                    posts.push({
+                        text: fullText,
+                        linkFacets: [{ label: linkLabel, uri: linkUri }],
+                    });
                 }
             }
 
             // Cache drafts
-            this.pendingDrafts = posts;
+            this.pendingDrafts = posts.map(p => p.text);
 
             // Hold for 30 seconds. The UI will display this exact countdown.
             const proceed2 = await this.smartDelay(30, `${prefix} ⏳ Drafts ready! Auto-publishing in`);
@@ -192,10 +248,10 @@ class CronService {
 
             // Publish & Save to Database
             this.currentStatus = `${prefix} Publishing to Bluesky...`;
-            const validPosts = posts.filter(p => p.trim().length > 0);
+            const validPosts = posts.filter(p => p.text && p.text.trim().length > 0);
 
             // All-or-nothing publishing & history protection
-            if (validPosts.some(p => p.length > 300)) {
+            if (validPosts.some(p => p.text.length > 300)) {
                 console.log(`⚠️ Aborting publish: Some posts are still over 300 chars after condensing.`);
                 this.currentStatus = 'Skipped: Posts exceeded character limits. Will retry later.';
                 // Return immediately! The thread is NOT published, and History is NOT saved!
