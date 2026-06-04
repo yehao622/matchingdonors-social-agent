@@ -9,16 +9,6 @@ export class HistoryService {
     private pgPool: Pool | null = null;
 
     constructor() {
-        // const dataDir = path.join(process.cwd(), 'data');
-        // if (!fs.existsSync(dataDir)) {
-        //     fs.mkdirSync(dataDir);
-        // }
-
-        // Initialize the SQLite database
-        // this.db = new Database(path.join(dataDir, 'history.db'));
-        // Enable Concurrent Read/Writes (WAL Mode)
-        // this.db.pragma('journal_mode = WAL');
-        // this.initDb();
         this.dbType = process.env.DB_TYPE || 'sqlite';
     }
 
@@ -110,6 +100,37 @@ export class HistoryService {
             }
         } catch (error) {
             console.error('Failed to fetch history', error);
+            return [];
+        }
+    }
+
+    public async getEnrichedHistory(limit: number = 50): Promise<any[]> {
+        try {
+            const query = `
+      SELECT
+        p.timestamp,
+        p.source_name,
+        p.title,
+        p.url,
+        e.archetype_code,
+        e.thread_type,
+        e.is_linkless,
+        e.slot_hour,
+        e.seo_keyword
+      FROM published_articles p
+      LEFT JOIN experiment_log e ON p.url = e.article_url
+      ORDER BY p.timestamp DESC
+      LIMIT ${this.dbType === 'postgres' ? '$1' : '?'}
+    `;
+
+            if (this.dbType === 'postgres') {
+                const res = await this.pgPool!.query(query, [limit]);
+                return res.rows;
+            } else {
+                return this.sqliteDb!.prepare(query).all(limit) as any[];
+            }
+        } catch (error) {
+            console.error('Failed to fetch enriched history', error);
             return [];
         }
     }

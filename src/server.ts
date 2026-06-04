@@ -144,6 +144,15 @@ app.get('/api/history', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch history.' });
     }
 });
+app.get('/api/history-enriched', async (req, res) => {
+    try {
+        const records = await historyService.getEnrichedHistory();
+        res.json(records);
+    } catch (error) {
+        console.error('Enriched history fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch enriched history.' });
+    }
+});
 
 // ==========================================
 // ENDPOINT 6: DRAFT STUDIO (MANUAL OVERRIDE)

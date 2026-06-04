@@ -27,6 +27,11 @@ interface HistoryItem {
   source_name: string;
   url: string;
   title?: string;
+  archetype_code?: string;
+  thread_type?: 'single' | 'thread';
+  is_linkless?: boolean | number;
+  slot_hour?: number;
+  seo_keyword?: string;
 }
 
 interface DraftData {
@@ -66,7 +71,7 @@ export default function App() {
         const data = await api.getStatus();
         setIsRunning(data.isRunning);
         setGlobalStatus(data.status);
-        const historyData = await api.getHistory();
+        const historyData = await api.getEnrichedHistory();
         setServerError(null);
         setHistory(historyData);
       } catch (error) {
@@ -177,12 +182,17 @@ export default function App() {
     if (filteredHistory.length === 0) return alert('No data to export!');
 
     // CSV Headers
-    const headers = ['Timestamp (UTC)', 'Source Network', 'Article Title', 'Live URL'];
+    const headers = ['Timestamp (UTC)', 'Source Network', 'Article Title', 'Live URL', 'Thread Type', 'Linkless', 'Live URL'];
 
     // Map data and escape commas/quotes in titles
     const rows = filteredHistory.map(row => {
       const safeTitle = `"${(row.title || 'Missing Title').replace(/"/g, '""')}"`;
-      return [row.timestamp, row.source_name, safeTitle, row.url].join(',');
+      return [
+        row.timestamp, row.source_name, safeTitle,
+        row.archetype_code || '', row.thread_type || '',
+        row.is_linkless != null ? (row.is_linkless ? 'yes' : 'no') : '',
+        row.url
+      ].join(',');
     });
 
     // Combine headers and rows
@@ -348,26 +358,46 @@ export default function App() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-gray-500 uppercase tracking-wider text-xs">
-                    <th className="pb-3 font-bold">Timestamp (UTC)</th>
-                    <th className="pb-3 font-bold">Source</th>
-                    <th className="pb-3 font-bold">Article Title</th>
+                    <th className="pb-3 pr-4 font-bold">Timestamp (UTC)</th>
+                    <th className="pb-3 pr-4 font-bold">Source</th>
+                    <th className="pb-3 pr-4 font-bold">Article Title</th>
+                    <th className="pb-3 pr-4 font-bold">Archetype</th>
+                    <th className="pb-3 pr-4 font-bold">Type</th>
+                    <th className="pb-3 pr-4 font-bold">Linkless</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paginatedHistory.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="py-3 text-gray-500 font-medium whitespace-nowrap">
-                        {row.timestamp.replace(' ', 'T')}Z
+                      <td className="py-3 text-gray-500 font-medium whitespace-nowrap text-xs">
+                        {row.timestamp.replace(' ', 'T')}
                       </td>
                       <td className="py-3">
                         <span className="bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded text-xs uppercase tracking-wide">
                           {row.source_name}
                         </span>
                       </td>
-                      <td className="py-3 font-medium">
-                        <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      <td className="py-3 font-medium max-w-[200px]">
+                        <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline line-clamp-2">
                           {row.title && row.title.length > 0 ? row.title : 'Missing Title (Legacy Entry)'}
                         </a>
+                      </td>
+                      <td className="py-3">
+                        {row.archetype_code
+                          ? <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">{row.archetype_code}</span>
+                          : <span className="text-gray-300 text-xs">—</span>}
+                      </td>
+                      <td className="py-3">
+                        {row.thread_type
+                          ? <span className={`font-bold px-2 py-1 rounded text-xs ${row.thread_type === 'thread' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {row.thread_type}
+                          </span>
+                          : <span className="text-gray-300 text-xs">—</span>}
+                      </td>
+                      <td className="py-3 text-center">
+                        {row.is_linkless != null
+                          ? (row.is_linkless ? '🔗❌' : '🔗✅')
+                          : <span className="text-gray-300 text-xs">—</span>}
                       </td>
                     </tr>
                   ))}
@@ -375,7 +405,7 @@ export default function App() {
                   {/* Fallback if search yields no results */}
                   {paginatedHistory.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="py-8 text-center text-gray-400 font-medium italic">
+                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium italic">
                         No articles published yet.
                       </td>
                     </tr>

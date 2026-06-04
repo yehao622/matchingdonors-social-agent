@@ -52,6 +52,7 @@ export const api = {
   stopEngine: () => fetchWrapper('/cron/stop', { method: 'POST' }),
 
   getHistory: () => fetchWrapper('/history'),
+  getEnrichedHistory: () => fetchWrapper('/history-enriched'),
 
   getStudioDraft: (crawlerId: string) => fetchWrapper(`/studio/${crawlerId}`),
 
