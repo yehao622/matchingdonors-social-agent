@@ -1,10 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import cron from 'node-cron';
 import { crawlerManager } from './CrawlerManager.js';
 import { generateInitialDraft, condensePost } from './aiService.js';
 import { publishThreadToBluesky, BlueskyPost } from './socialService.js';
 import { historyService } from './HistoryService.js';
+import { getTopButtonAction } from './ga4Sanitizer.js';
+import { experimentService, ExperimentRecord } from './ExperimentService.js';
 
 class CronService {
     private task: cron.ScheduledTask | null = null;
@@ -111,35 +111,9 @@ class CronService {
 
     // Read GA4 data to find the best topic ---
     private getPerformanceHint(): string {
-        try {
-            const filePath = path.resolve(process.cwd(), 'analytics_output.json');
-
-            if (!fs.existsSync(filePath)) {
-                return ""; // If the file doesn't exist yet, just return nothing
-            }
-
-            const rawData = fs.readFileSync(filePath, 'utf-8');
-            const data = JSON.parse(rawData);
-
-            // Filter out general page views and "(not set)" rows to only get explicit button clicks
-            const buttonClicks = data.filter((row: any) =>
-                row["Event name"] === "core_button_link_click" &&
-                row["Button Name"] &&
-                row["Button Name"] !== "(not set)"
-            );
-
-            if (buttonClicks.length > 0) {
-                // Sort to find the button with the highest "Event count"
-                const topActionRow = buttonClicks.sort((a: any, b: any) => b["Event count"] - a["Event count"])[0];
-                const targetAction = topActionRow["Button Name"];
-
-                // Return the specific psychological hint to Gemini
-                return `Our analytics show that website visitors are currently highly engaged with the "${targetAction}" feature. Try to subtly frame the emotional angle or call-to-action of this post to encourage readers to explore that specific area of the site.`;
-            }
-        } catch (error) {
-            console.error("⚠️ Failed to read analytics feedback:", error);
-        }
-        return "";
+        const topAction = getTopButtonAction(); // sanitized — dev/bot rows already stripped
+        if (!topAction) return '';
+        return `Our analytics show that website visitors are currently highly engaged with the "${topAction}" feature. Try to subtly frame the emotional angle or call-to-action of this post to encourage readers to explore that specific area of the site.`;
     }
 
     // This is the fully automated pipeline (No humans required!)
@@ -261,6 +235,22 @@ class CronService {
             if (validPosts.length > 0) {
                 await publishThreadToBluesky(validPosts);
                 await historyService.markArticleCrawled(article.title || 'Medical News', article.sourceName, article.url);
+
+                // --- Experiment logging ---
+                // archetype_code: use the first draft's code as representative of the whole thread
+                const representativeCode = drafts[0]?.code || 'ai_general';
+                const experimentRecord: ExperimentRecord = {
+                    archetype_code: representativeCode,
+                    thread_type: drafts.length > 1 ? 'thread' : 'single',
+                    is_linkless: isLinklessPost,
+                    slot_hour: new Date().getHours(),
+                    source_domain: new URL(article.url).hostname,
+                    article_url: article.url,
+                    seo_keyword: trendingSEOKeyword,
+                    published_at: new Date().toISOString(),
+                };
+                await experimentService.logExperiment(experimentRecord);
+
                 console.log(`✅ Cron Engine: Successfully published & recorded ${article.url}`);
                 this.currentStatus = `Sleeping. Last published from ${article.sourceName}.`;
 
