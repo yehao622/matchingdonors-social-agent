@@ -116,6 +116,7 @@ export class HistoryService {
         e.thread_type,
         e.is_linkless,
         e.slot_hour,
+        e.relevance_score,
         e.seo_keyword
       FROM published_articles p
       LEFT JOIN experiment_log e ON p.url = e.article_url

@@ -247,6 +247,7 @@ class CronService {
                     source_domain: new URL(article.url).hostname,
                     article_url: article.url,
                     seo_keyword: trendingSEOKeyword,
+                    relevance_score: article.relevanceScore ?? 0,
                     published_at: new Date().toISOString(),
                 };
                 await experimentService.logExperiment(experimentRecord);

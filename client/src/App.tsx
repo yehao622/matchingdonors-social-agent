@@ -31,6 +31,7 @@ interface HistoryItem {
   thread_type?: 'single' | 'thread';
   is_linkless?: boolean | number;
   slot_hour?: number;
+  relevance_score?: number | null;
   seo_keyword?: string;
 }
 
@@ -182,13 +183,13 @@ export default function App() {
     if (filteredHistory.length === 0) return alert('No data to export!');
 
     // CSV Headers
-    const headers = ['Timestamp (UTC)', 'Source Network', 'Article Title', 'Live URL', 'Thread Type', 'Linkless', 'Live URL'];
+    const headers = ['Timestamp (UTC)', 'Source Network', 'Article Title', 'Score', 'Thread Type', 'Linkless', 'Live URL'];
 
     // Map data and escape commas/quotes in titles
     const rows = filteredHistory.map(row => {
       const safeTitle = `"${(row.title || 'Missing Title').replace(/"/g, '""')}"`;
       return [
-        row.timestamp, row.source_name, safeTitle,
+        row.timestamp, row.source_name, safeTitle, row.relevance_score ?? '',
         row.archetype_code || '', row.thread_type || '',
         row.is_linkless != null ? (row.is_linkless ? 'yes' : 'no') : '',
         row.url
@@ -361,6 +362,7 @@ export default function App() {
                     <th className="pb-3 pr-4 font-bold">Timestamp (UTC)</th>
                     <th className="pb-3 pr-4 font-bold">Source</th>
                     <th className="pb-3 pr-4 font-bold">Article Title</th>
+                    <th className="pb-3 pr-4 font-bold">Score</th>
                     <th className="pb-3 pr-4 font-bold">Archetype</th>
                     <th className="pb-3 pr-4 font-bold">Type</th>
                     <th className="pb-3 pr-4 font-bold">Linkless</th>
@@ -381,6 +383,11 @@ export default function App() {
                         <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline line-clamp-2">
                           {row.title && row.title.length > 0 ? row.title : 'Missing Title (Legacy Entry)'}
                         </a>
+                      </td>
+                      <td className="py-3">
+                        {row.relevance_score
+                          ? <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">{row.relevance_score}</span>
+                          : <span className="text-gray-300 text-xs">—</span>}
                       </td>
                       <td className="py-3">
                         {row.archetype_code

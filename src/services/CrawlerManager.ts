@@ -5,9 +5,15 @@ import { PubMedCrawler } from './crawler/PubMedCrawler.js';
 import { PlosCrawler } from './crawler/PlosCrawler.js';
 import { OptnCrawler } from './crawler/OptnCrawler.js';
 import { historyService } from './HistoryService.js';
+import { isRelevantArticle, getArticleRelevanceScore } from './articleRelevanceService.js';
 
 export interface ICrawler {
-    crawlRandomArticle(): Promise<{ title: string; excerpt: string; url: string; content?: string }>;
+    crawlRandomArticle(): Promise<{
+        title: string;
+        excerpt: string;
+        url: string;
+        content?: string
+    }>;
 }
 
 export class CrawlerManager {
@@ -31,21 +37,22 @@ export class CrawlerManager {
         excerpt: string;
         url: string;
         content?: string;
-        sourceName: string
+        sourceName: string;
+        relevanceScore: number;
     }> {
         let attempts = 0;
-        const maxAttempts = this.crawlers.length;
+        const maxAttempts = Math.min(Math.max(this.crawlers.length * 5, 5), 15);;
 
         while (attempts < maxAttempts) {
             attempts++;
 
             const selectedCrawler = this.crawlers[this.currentIndex];
+            this.currentIndex = (this.currentIndex + 1) % this.crawlers.length;
+
             if (!selectedCrawler) {
                 console.warn('⚠️ Encountered undefined crawler in array. Skipping.');
                 continue;
             }
-
-            this.currentIndex = (this.currentIndex + 1) % this.crawlers.length;
 
             console.log(` [Attempt ${attempts}] routing to: ${selectedCrawler.constructor.name}`);
 
@@ -57,15 +64,25 @@ export class CrawlerManager {
                     continue;
                 }
 
-                // If it's a fresh, never-before-seen article!
+                const relevanceScore = getArticleRelevanceScore(articleData);
+                if (!isRelevantArticle(articleData)) {
+                    console.log(
+                        `[Relevance Filter] Skipping low-relevance article: "${articleData.title}" (score: ${relevanceScore})`
+                    );
+                    continue;
+                }
+
+                // If it's a fresh, never-before-seen and filtered article!
                 // We attach the source name so we can record it properly later.
                 return {
                     ...articleData,
-                    sourceName: selectedCrawler.constructor.name
+                    sourceName: selectedCrawler.constructor.name,
+                    relevanceScore
                 };
 
             } catch (error: any) {
                 console.error(`⚠️ ${selectedCrawler.constructor.name} failed. Reason: ${error.message}`);
+                continue;
             }
         }
 
