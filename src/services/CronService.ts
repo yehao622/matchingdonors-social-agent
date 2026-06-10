@@ -5,6 +5,7 @@ import { publishThreadToBluesky, BlueskyPost } from './socialService.js';
 import { historyService } from './HistoryService.js';
 import { getTopButtonAction } from './ga4Sanitizer.js';
 import { experimentService, ExperimentRecord } from './ExperimentService.js';
+import { banditService } from './BanditService.js';
 
 class CronService {
     private task: cron.ScheduledTask | null = null;
@@ -142,6 +143,23 @@ class CronService {
             console.log(`Injecting GSC Target Keyword: "${trendingSEOKeyword}"`);
             this.keywordIndex = (this.keywordIndex + 1) % this.targetSeoKeywords.length;
 
+            const currentSlotHour = new Date().getHours();
+
+            const banditDecision = await banditService.chooseAction({
+                relevanceScore: article.relevanceScore ?? 0,
+                sourceName: article.sourceName,
+                seoKeyword: trendingSEOKeyword,
+                slotHour: currentSlotHour,
+            });
+
+            const actionPlan = banditService.getActionExecutionPlan(banditDecision.actionKey);
+            const isLinklessPost = actionPlan.forceLinkless;
+            const wantTwoPart = actionPlan.forceThread;
+
+            console.log(
+                `🎯 Bandit decision: action=${banditDecision.actionKey} | context=${banditDecision.contextBucket} | explore=${banditDecision.epsilonUsed}`
+            );
+
             // Grab the Analytics Feedback ---
             const performanceHint = this.getPerformanceHint();
             if (performanceHint) {
@@ -154,8 +172,8 @@ class CronService {
             // Provide fallback strings just in case the crawler missed the title or excerpt
             const safeTitle = article.title || 'Medical News';
             const safeExcerpt = article.excerpt || '';
-            const isLinklessPost = Math.random() < 1 / 3;
-            const wantTwoPart = !isLinklessPost && Math.random() < 0.5;
+            // const isLinklessPost = Math.random() < 1 / 3;
+            // const wantTwoPart = !isLinklessPost && Math.random() < 0.5;
 
             let drafts = (await generateInitialDraft(
                 safeTitle,
@@ -168,6 +186,17 @@ class CronService {
                 console.log('⚠️ Gemini returned no posts. Skipping to next cycle.');
                 this.currentStatus = 'Skipped: No drafts generated.';
                 return;
+            }
+
+            if (actionPlan.forceThread && drafts.length > 2) {
+                drafts = drafts.slice(0, 2);
+            }
+
+            if (!actionPlan.forceThread && drafts.length > 1) {
+                const firstDraft = drafts[0];
+                if (firstDraft) {
+                    drafts = [firstDraft];
+                }
             }
 
             // Auto-Fix any posts that exceed 300 characters
@@ -239,18 +268,25 @@ class CronService {
                 // --- Experiment logging ---
                 // archetype_code: use the first draft's code as representative of the whole thread
                 const representativeCode = drafts[0]?.code || 'ai_general';
+                const publishedAt = new Date().toISOString();
                 const experimentRecord: ExperimentRecord = {
                     archetype_code: representativeCode,
                     thread_type: drafts.length > 1 ? 'thread' : 'single',
                     is_linkless: isLinklessPost,
-                    slot_hour: new Date().getHours(),
+                    slot_hour: currentSlotHour,
                     source_domain: new URL(article.url).hostname,
                     article_url: article.url,
                     seo_keyword: trendingSEOKeyword,
                     relevance_score: article.relevanceScore ?? 0,
-                    published_at: new Date().toISOString(),
+                    published_at: publishedAt,
                 };
                 await experimentService.logExperiment(experimentRecord);
+                await banditService.logPendingDecision({
+                    articleUrl: article.url,
+                    contextBucket: banditDecision.contextBucket,
+                    actionKey: banditDecision.actionKey,
+                    publishedAt: experimentRecord.published_at,
+                });
 
                 console.log(`✅ Cron Engine: Successfully published & recorded ${article.url}`);
                 this.currentStatus = `Sleeping. Last published from ${article.sourceName}.`;

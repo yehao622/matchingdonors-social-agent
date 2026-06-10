@@ -20,6 +20,7 @@ import { generateInitialDraft, condensePost } from './services/aiService.js';
 import { publishThreadToBluesky } from './services/socialService.js';
 import { shortenUrl } from './services/urlService.js';
 import { historyService } from './services/HistoryService.js';
+import { banditService } from './services/BanditService.js';
 import { experimentService } from './services/ExperimentService.js';
 import { cronService } from './services/CronService.js';
 import { loadCleanGA4Data } from './services/ga4Sanitizer.js';
@@ -248,6 +249,7 @@ app.listen(PORT, async () => {
     // Initialize the database (Postgres OR SQLite) before accepting traffic
     await historyService.init();
     await experimentService.init();
+    await banditService.init();
 
     console.log(`🌐 API Server is running on http://localhost:${PORT}`);
     console.log(`Use 'npx tsx src/index.ts' if you want to run the CLI instead!`);
@@ -261,6 +263,7 @@ const shutdown = async () => {
     cronService.stop();         // 1. Stop the cron engine from starting new jobs
     await historyService.close();     // 2. Safely close the database to prevent corruption
     await experimentService.close();
+    await banditService.close();
     process.exit(0);            // 3. Exit safely
 };
 
