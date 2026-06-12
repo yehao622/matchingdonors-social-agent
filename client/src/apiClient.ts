@@ -25,6 +25,16 @@ async function fetchWrapper(endpoint: string, options: RequestInit = {}) {
   return response.json();
 }
 
+export type PublishablePost =
+  | string
+  | {
+    text: string;
+    linkFacets?: Array<{
+      label: string;
+      uri: string;
+    }>;
+  };
+
 export const api = {
   scrape: () => fetchWrapper('/scrape'),
 
@@ -40,7 +50,7 @@ export const api = {
     body: JSON.stringify(payload),
   }),
 
-  publish: (posts: string[], sourceName?: string, url?: string) => fetchWrapper('/publish', {
+  publish: (posts: PublishablePost[], sourceName?: string, url?: string) => fetchWrapper('/publish', {
     method: 'POST',
     body: JSON.stringify({ posts, sourceName, url }),
   }),
@@ -57,7 +67,7 @@ export const api = {
   getStudioDraft: (crawlerId: string) => fetchWrapper(`/studio/${crawlerId}`),
 
   // This perfectly handles the 4 parameters we fixed earlier
-  publishPost: (posts: string[], sourceName: string, url: string, title: string) => fetchWrapper('/publish', {
+  publishPost: (posts: PublishablePost[], sourceName: string, url: string, title: string) => fetchWrapper('/publish', {
     method: 'POST',
     body: JSON.stringify({ posts, sourceName, url, title }),
   }),

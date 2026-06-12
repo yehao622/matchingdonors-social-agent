@@ -91,12 +91,45 @@ app.post('/api/publish', async (req, res) => {
     try {
         let { posts, sourceName, url, title } = req.body;
 
-        // Clean the array on the backend side just to be safe
-        if (Array.isArray(posts)) {
-            posts = posts.filter((p: string) => typeof p === 'string' && p.trim().length > 0);
+        if (!Array.isArray(posts)) {
+            return res.status(400).json({ error: 'Posts must be an array.' });
         }
 
-        if (!posts || posts.length === 0) {
+        posts = posts
+            .map((p: any) => {
+                if (typeof p === 'string') {
+                    const text = p.trim();
+                    return text.length > 0 ? text : null;
+                }
+
+                if (p && typeof p === 'object' && typeof p.text === 'string') {
+                    const text = p.text.trim();
+                    if (text.length === 0) return null;
+
+                    return {
+                        text,
+                        linkFacets: Array.isArray(p.linkFacets)
+                            ? p.linkFacets
+                                .filter((f: any) =>
+                                    f &&
+                                    typeof f.label === 'string' &&
+                                    f.label.trim().length > 0 &&
+                                    typeof f.uri === 'string' &&
+                                    f.uri.trim().length > 0
+                                )
+                                .map((f: any) => ({
+                                    label: f.label.trim(),
+                                    uri: f.uri.trim(),
+                                }))
+                            : undefined,
+                    };
+                }
+
+                return null;
+            })
+            .filter(Boolean);
+
+        if (posts.length === 0) {
             return res.status(400).json({ error: 'No valid posts provided.' });
         }
 
@@ -183,17 +216,37 @@ app.get('/api/studio/:crawlerId', async (req, res) => {
         const article = await crawler.crawlRandomArticle();
 
         // 3. Generate drafts — returns { text, code }[] objects now
-        const posts = await generateInitialDraft(article.title, article.excerpt || '', '', '', false);
+        const rawDrafts = await generateInitialDraft(
+            article.title || 'Medical News',
+            article.excerpt || '',
+            'organ donation'
+        );
 
-        for (let i = 0; i < posts.length; i++) {
-            const currentPost = posts[i];
-            if (!currentPost) continue;
+        const posts: string[] = [];
 
-            if (currentPost && currentPost.text.length > 300) {
-                // Now we safely pass 'currentPost' instead of 'posts[i]'
-                const newText = await condensePost(currentPost.text, 'Make it more concise under 200 chars.');
-                if (newText) currentPost.text = newText;
+        for (let i = 0; i < rawDrafts.length; i++) {
+            const draft = rawDrafts[i];
+            if (!draft || !draft.text) continue;
+
+            let text = typeof draft === 'string' ? draft : draft.text;
+            const code = typeof draft === 'string' ? 'ai_general' : draft.code;
+
+            // if (!text || typeof text !== 'string') continue;
+
+            if (text.length > 300) {
+                const newText = await condensePost(text, 'Make it more concise under 200 chars.');
+                if (newText) text = newText;
             }
+
+            let fullPost = text;
+
+            if (rawDrafts.length === 2 && i === 0) {
+                fullPost += `\n\nhttps://matchingdonors.com/life/?utm_source=bsky&utm_medium=soc&utm_campaign=${code}`;
+            } else {
+                fullPost += `\n\n${article.url}?utm_source=bsky&utm_medium=soc&utm_campaign=${code}`;
+            }
+
+            posts.push(fullPost);
         }
 
         res.json({
@@ -201,7 +254,7 @@ app.get('/api/studio/:crawlerId', async (req, res) => {
                 ...article,
                 sourceName: crawlerId
             },
-            posts: posts.map(p => p.text),
+            posts
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

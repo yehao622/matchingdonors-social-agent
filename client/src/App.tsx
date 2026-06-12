@@ -40,6 +40,14 @@ interface DraftData {
   posts: string[];
 }
 
+type ManualStudioPost = {
+  text: string;
+  linkFacets?: Array<{
+    label: string;
+    uri: string;
+  }>;
+};
+
 export default function App() {
   // --- DASHBOARD STATE ---
   const [isRunning, setIsRunning] = useState(false);
@@ -120,24 +128,80 @@ export default function App() {
     }
   };
 
+  const normalizeManualDraftForPublish = (input: string): string => {
+    return input
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$2')
+      .replace(/\n{3,}---\n{3,}/g, '\n\n---\n\n')
+      .trim();
+  };
+
+  const buildStudioPayload = (input: string): ManualStudioPost[] => {
+    const normalizedDraft = normalizeManualDraftForPublish(input);
+
+    const parts = normalizedDraft
+      .split('\n\n---\n\n')
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+
+    return parts.map((post, index) => {
+      const urlMatch = post.match(/https?:\/\/\S+/);
+      const rawUrl = urlMatch?.[0];
+
+      const textWithoutUrl = rawUrl
+        ? post.replace(rawUrl, '').trim()
+        : post.trim();
+
+      if (!rawUrl) {
+        return { text: textWithoutUrl };
+      }
+
+      const isFirstOfThread = parts.length === 2 && index === 0;
+      const label = isFirstOfThread ? '→ MatchingDonors' : '→ Read article';
+
+      return {
+        text: `${textWithoutUrl}\n\n${label}`,
+        linkFacets: [
+          {
+            label,
+            uri: rawUrl,
+          },
+        ],
+      };
+    });
+  };
+
   const handlePublish = async () => {
     if (!draftData) return;
 
     setIsTimerPaused(true);
-    try {
-      // Convert the text box back into an array for the backend
-      const postsArray = editedDraft.split('\n\n').filter(p => p.trim() !== '');
-      if (postsArray.length === 0) return alert('Cannot publish empty posts!');
 
-      const overLimitIndex = postsArray.findIndex(p => p.length > 300);
-      if (overLimitIndex !== -1) {
-        setIsTimerPaused(true); // Keep timer paused!
-        return alert(`Wait! Post ${overLimitIndex + 1} is over the 300 character limit (${postsArray[overLimitIndex].length} chars). Please manually shorten it before publishing.`);
+    try {
+      const studioPosts = buildStudioPayload(editedDraft);
+
+      if (studioPosts.length === 0) {
+        return alert('Cannot publish empty posts!');
       }
 
-      await api.publishPost(postsArray, activeCrawler || 'Manual', draftData.article.url, draftData.article.title);
-      setIsDrafting(false);
+      if (studioPosts.some(p => p.text.trim().replace(/→ MatchingDonors|→ Read article/g, '').trim().length === 0)) {
+        return alert('Each post needs some actual text, not only a link.');
+      }
 
+      const overLimitIndex = studioPosts.findIndex(p => p.text.length > 300);
+      if (overLimitIndex !== -1) {
+        setIsTimerPaused(true);
+        return alert(
+          `Wait! Post ${overLimitIndex + 1} is over the 300 character limit (${studioPosts[overLimitIndex].text.length} chars). Please manually shorten it before publishing.`
+        );
+      }
+
+      await api.publishPost(
+        studioPosts,
+        activeCrawler || 'Manual',
+        draftData.article.url,
+        draftData.article.title
+      );
+
+      setIsDrafting(false);
       await api.startEngine();
       setIsRunning(true);
     } catch (error) {

@@ -119,9 +119,11 @@ class CronService {
 
     // This is the fully automated pipeline (No humans required!)
     private async runWorkflow() {
-        this.currentStatus = 'Crawling for an article...';
+        this.currentStatus = 'Checking pending bandit rewards...';
 
         try {
+            await banditService.resolvePendingRewards();
+            this.currentStatus = 'Crawling for an article...';
             // 1. Scrape (Round-Robin skips duplicates automatically!)
             const article = await crawlerManager.fetchOneArticleFromSources();
             const prefix = `[${article.sourceName}]`;

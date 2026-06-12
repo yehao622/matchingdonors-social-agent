@@ -36,12 +36,21 @@ interface ActionStatsRow {
     avg_reward: number;
 }
 
+interface ManualRewardReview {
+    article_url: string;
+    reward: number | null;
+    reviewed_at?: string;
+    notes?: string;
+}
+
 class BanditService {
     private dbType: string;
     private sqliteDb: Database.Database | null = null;
     private pgPool: Pool | null = null;
 
     private readonly epsilon = 0.2;
+    private readonly rewardMaturityHours = 72;
+    private readonly rewardReviewFilePath = path.join(process.cwd(), 'data', 'bandit_reward_reviews.json');
 
     private readonly actionCatalog: readonly BanditActionKey[] = [
         'thread_linked',
@@ -52,23 +61,46 @@ class BanditService {
         this.dbType = process.env.DB_TYPE || 'sqlite';
     }
 
+    private ensureManualReviewFileExists(): void {
+        const dir = path.dirname(this.rewardReviewFilePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        if (!fs.existsSync(this.rewardReviewFilePath)) {
+            fs.writeFileSync(this.rewardReviewFilePath, JSON.stringify([], null, 2), 'utf-8');
+        }
+    }
+
+    private readManualRewardReviews(): ManualRewardReview[] {
+        try {
+            this.ensureManualReviewFileExists();
+            const raw = fs.readFileSync(this.rewardReviewFilePath, 'utf-8');
+            const parsed = JSON.parse(raw);
+
+            if (!Array.isArray(parsed)) return [];
+            return parsed as ManualRewardReview[];
+        } catch (error) {
+            console.error('⚠️ BanditService: Failed to read manual reward review file:', error);
+            return [];
+        }
+    }
+
     public async init(): Promise<void> {
         if (this.dbType === 'postgres') {
             console.log('🔗 BanditService: Connecting to PostgreSQL...');
             this.pgPool = new Pool({ connectionString: process.env.DATABASE_URL });
 
             await this.pgPool.query(`
-        CREATE TABLE IF NOT EXISTS bandit_feedback (
-          id SERIAL PRIMARY KEY,
-          article_url TEXT NOT NULL UNIQUE,
-          context_bucket TEXT NOT NULL,
-          action_key TEXT NOT NULL,
-          reward_status TEXT NOT NULL,
-          reward DOUBLE PRECISION NULL,
-          published_at TIMESTAMP NOT NULL,
-          resolved_at TIMESTAMP NULL
-        )
-      `);
+                CREATE TABLE IF NOT EXISTS bandit_feedback (
+                    id SERIAL PRIMARY KEY,
+                    article_url TEXT NOT NULL UNIQUE,
+                    context_bucket TEXT NOT NULL,
+                    action_key TEXT NOT NULL,
+                    reward_status TEXT NOT NULL,
+                    reward DOUBLE PRECISION NULL,
+                    published_at TIMESTAMP NOT NULL,
+                    resolved_at TIMESTAMP NULL
+                )
+            `);
         } else {
             console.log('🗄️ BanditService: Connecting to Local SQLite...');
             const dataDir = path.join(process.cwd(), 'data');
@@ -78,18 +110,20 @@ class BanditService {
             this.sqliteDb.pragma('journal_mode = WAL');
 
             this.sqliteDb.prepare(`
-        CREATE TABLE IF NOT EXISTS bandit_feedback (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          article_url TEXT NOT NULL UNIQUE,
-          context_bucket TEXT NOT NULL,
-          action_key TEXT NOT NULL,
-          reward_status TEXT NOT NULL,
-          reward REAL NULL,
-          published_at DATETIME NOT NULL,
-          resolved_at DATETIME NULL
-        )
-      `).run();
+                CREATE TABLE IF NOT EXISTS bandit_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_url TEXT NOT NULL UNIQUE,
+                context_bucket TEXT NOT NULL,
+                action_key TEXT NOT NULL,
+                reward_status TEXT NOT NULL,
+                reward REAL NULL,
+                published_at DATETIME NOT NULL,
+                resolved_at DATETIME NULL
+                )
+            `).run();
         }
+
+        this.ensureManualReviewFileExists();
     }
 
     public async close(): Promise<void> {
@@ -112,7 +146,6 @@ class BanditService {
     public async chooseAction(input: BanditContextInput): Promise<BanditDecision> {
         const contextBucket = this.buildContextBucket(input);
         const stats = await this.getActionStats(contextBucket);
-
         const shouldExplore = Math.random() < this.epsilon;
 
         if (shouldExplore) {
@@ -176,6 +209,112 @@ class BanditService {
             }
         } catch (error) {
             console.error('⚠️ BanditService: Failed to log pending decision:', error);
+        }
+    }
+
+    public async resolvePendingRewards(): Promise<void> {
+        try {
+            const rows = await this.getPendingRowsReadyForResolution();
+
+            if (rows.length === 0) {
+                console.log('🧪 BanditService: No pending rewards ready for sample-test resolution.');
+                return;
+            }
+
+            console.log(`🧪 BanditService: Resolving ${rows.length} pending reward(s)...`);
+
+            for (const row of rows) {
+                const reward = await this.computeRewardForPendingRow(row);
+
+                if (reward === null) {
+                    console.log(`🟡 BanditService: Reward still unresolved for ${row.article_url}`);
+                    continue;
+                }
+
+                await this.markRewardResolved(row.article_url, reward);
+                console.log(`✅ BanditService: Resolved reward=${reward} for ${row.article_url}`);
+            }
+        } catch (error) {
+            console.error('⚠️ BanditService: Failed to resolve pending rewards:', error);
+        }
+    }
+
+    private async computeRewardForPendingRow(row: PendingBanditRecord): Promise<number | null> {
+        const reviews = this.readManualRewardReviews();
+        const matched = reviews.find((review) => review.article_url === row.article_url);
+
+        if (!matched) {
+            return null;
+        }
+
+        if (matched.reward !== 0 && matched.reward !== 1) {
+            return null;
+        }
+
+        return matched.reward;
+    }
+
+    private async getPendingRowsReadyForResolution(): Promise<PendingBanditRecord[]> {
+        const cutoffDate = new Date(Date.now() - this.rewardMaturityHours * 60 * 60 * 1000).toISOString();
+
+        try {
+            if (this.dbType === 'postgres') {
+                const res = await this.pgPool!.query(
+                    `
+          SELECT article_url, context_bucket, action_key, reward_status, reward, published_at, resolved_at
+          FROM bandit_feedback
+          WHERE reward_status = 'pending'
+            AND published_at <= $1
+          ORDER BY published_at ASC
+          `,
+                    [cutoffDate]
+                );
+                return res.rows as PendingBanditRecord[];
+            }
+
+            return this.sqliteDb!.prepare(
+                `
+        SELECT article_url, context_bucket, action_key, reward_status, reward, published_at, resolved_at
+        FROM bandit_feedback
+        WHERE reward_status = 'pending'
+          AND published_at <= ?
+        ORDER BY published_at ASC
+        `
+            ).all(cutoffDate) as PendingBanditRecord[];
+        } catch (error) {
+            console.error('⚠️ BanditService: Failed to load pending rows:', error);
+            return [];
+        }
+    }
+
+    private async markRewardResolved(articleUrl: string, reward: number): Promise<void> {
+        const resolvedAt = new Date().toISOString();
+
+        try {
+            if (this.dbType === 'postgres') {
+                await this.pgPool!.query(
+                    `
+          UPDATE bandit_feedback
+          SET reward_status = $1,
+              reward = $2,
+              resolved_at = $3
+          WHERE article_url = $4
+          `,
+                    ['resolved', reward, resolvedAt, articleUrl]
+                );
+            } else {
+                this.sqliteDb!.prepare(
+                    `
+          UPDATE bandit_feedback
+          SET reward_status = ?,
+              reward = ?,
+              resolved_at = ?
+          WHERE article_url = ?
+          `
+                ).run('resolved', reward, resolvedAt, articleUrl);
+            }
+        } catch (error) {
+            console.error(`⚠️ BanditService: Failed to mark reward resolved for ${articleUrl}:`, error);
         }
     }
 

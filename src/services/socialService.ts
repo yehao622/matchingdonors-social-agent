@@ -13,15 +13,20 @@ export interface BlueskyPost {
     }>;
 }
 
+type PublishablePost = string | BlueskyPost;
+
+function normalizePost(post: PublishablePost): BlueskyPost {
+    if (typeof post === 'string') {
+        return { text: post };
+    }
+    return post;
+}
+
 // Using TextEncoder ensures emoji or non-ASCII chars don't shift offsets.
 function buildLinkFacet(fullText: string, label: string, uri: string): object | null {
-    const encoder = new TextEncoder();
-    const textBytes = encoder.encode(fullText);
-    const labelBytes = encoder.encode(label);
-
     // Find the byte offset of the label inside the full text
-    const fullByteStr = Buffer.from(textBytes);
-    const labelByteStr = Buffer.from(labelBytes);
+    const fullByteStr = Buffer.from(fullText, 'utf8');
+    const labelByteStr = Buffer.from(label, 'utf8');
 
     let byteStart = -1;
     for (let i = 0; i <= fullByteStr.length - labelByteStr.length; i++) {
@@ -50,7 +55,7 @@ function buildLinkFacet(fullText: string, label: string, uri: string): object | 
     };
 }
 
-export async function publishThreadToBluesky(posts: BlueskyPost[]): Promise<void> {
+export async function publishThreadToBluesky(posts: PublishablePost[]): Promise<void> {
     // NEW: Only log in if we haven't already!
     if (!isAuthenticated) {
         await bskyAgent.login({
@@ -66,15 +71,17 @@ export async function publishThreadToBluesky(posts: BlueskyPost[]): Promise<void
     let postedCount = 0;
 
     try {
-        for (const postObj of posts) {
+        for (const rawPost of posts) {
+            const postObj = normalizePost(rawPost);
+
             const rt = new RichText({ text: postObj.text });
-            await rt.detectFacets(bskyAgent);  // Auto-detect #hashtags and @mentions
+            await rt.detectFacets(bskyAgent);
 
             // Build manual link facets (e.g. "Read More" → full UTM URL)
             const manualFacets: object[] = [];
-            if (postObj.linkFacets && postObj.linkFacets.length > 0) {
+            if (postObj.linkFacets?.length) {
                 for (const { label, uri } of postObj.linkFacets) {
-                    const facet = buildLinkFacet(postObj.text, label, uri);
+                    const facet = buildLinkFacet(rt.text, label, uri);
                     if (facet) manualFacets.push(facet);
                 }
             }
