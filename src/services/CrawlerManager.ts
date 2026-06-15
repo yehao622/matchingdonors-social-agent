@@ -6,6 +6,7 @@ import { PlosCrawler } from './crawler/PlosCrawler.js';
 import { OptnCrawler } from './crawler/OptnCrawler.js';
 import { historyService } from './HistoryService.js';
 import { isRelevantArticle, getArticleRelevanceScore } from './articleRelevanceService.js';
+import { isHighEngagementCandidate, getArticleEngagementScore } from './postEngagementService.js';
 
 export interface ICrawler {
     crawlRandomArticle(): Promise<{
@@ -39,6 +40,7 @@ export class CrawlerManager {
         content?: string;
         sourceName: string;
         relevanceScore: number;
+        engagementScore: number;
     }> {
         let attempts = 0;
         const maxAttempts = Math.min(Math.max(this.crawlers.length * 5, 5), 15);;
@@ -72,12 +74,21 @@ export class CrawlerManager {
                     continue;
                 }
 
+                const engagementScore = getArticleEngagementScore(articleData);
+                if (!isHighEngagementCandidate(articleData)) {
+                    console.log(
+                        `[Engagement Filter] Skipping low-engagement article: "${articleData.title}" (engagement: ${engagementScore})`
+                    );
+                    continue;
+                }
+
                 // If it's a fresh, never-before-seen and filtered article!
                 // We attach the source name so we can record it properly later.
                 return {
                     ...articleData,
                     sourceName: selectedCrawler.constructor.name,
-                    relevanceScore
+                    relevanceScore,
+                    engagementScore
                 };
 
             } catch (error: any) {
