@@ -278,8 +278,10 @@ class CronService {
                     slot_hour: currentSlotHour,
                     source_domain: new URL(article.url).hostname,
                     article_url: article.url,
+                    article_title: article.title || 'Medical News',
                     seo_keyword: trendingSEOKeyword,
                     relevance_score: article.relevanceScore ?? 0,
+                    engagement_score: article.engagementScore ?? 0,
                     published_at: publishedAt,
                 };
                 await experimentService.logExperiment(experimentRecord);

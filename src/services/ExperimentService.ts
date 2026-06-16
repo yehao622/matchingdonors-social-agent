@@ -16,8 +16,10 @@ export interface ExperimentRecord {
     slot_hour: number;   // 9 | 11 | 13 | 15 | 17
     source_domain: string;   // 'dailydiabetesnews.com'
     article_url: string;
+    article_title: string;
     seo_keyword: string;
     relevance_score: number;
+    engagement_score: number;
     published_at: string;   // ISO timestamp
 }
 
@@ -47,12 +49,16 @@ class ExperimentService {
           slot_hour        INTEGER NOT NULL,
           source_domain    TEXT NOT NULL,
           article_url      TEXT NOT NULL,
+          article_title TEXT NOT NULL DEFAULT '',
           seo_keyword      TEXT NOT NULL,
-          relevance_score  INTEGER,
+          relevance_score INTEGER NOT NULL DEFAULT 0,
+          engagement_score INTEGER NOT NULL DEFAULT 0,
           published_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ALTER TABLE experiment_log
-        ADD COLUMN IF NOT EXISTS relevance_score INTEGER;
+        ADD COLUMN IF NOT EXISTS article_title TEXT NOT NULL DEFAULT
+        ADD COLUMN IF NOT EXISTS relevance_score INTEGER NOT NULL DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS engagement_score INTEGER NOT NULL DEFAULT 0;
       `);
         } else {
             console.log('🗄️  ExperimentService: Connecting to Local SQLite...');
@@ -70,17 +76,27 @@ class ExperimentService {
           slot_hour        INTEGER NOT NULL,
           source_domain    TEXT NOT NULL,
           article_url      TEXT NOT NULL,
+          article_title TEXT NOT NULL DEFAULT '',
           seo_keyword      TEXT NOT NULL,
-          relevance_score  INTEGER,
+          relevance_score INTEGER NOT NULL DEFAULT 0,
+          engagement_score INTEGER NOT NULL DEFAULT 0,
           published_at     DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `).run();
 
             const columns = this.sqliteDb.prepare(`PRAGMA table_info(experiment_log)`).all() as any[];
             const hasRelevanceScore = columns.some(col => col.name === 'relevance_score');
+            const hasArticleTitle = columns.some(col => col.name === 'article_title');
+            const hasEngagementScore = columns.some(col => col.name === 'engagement_score');
 
             if (!hasRelevanceScore) {
-                this.sqliteDb.prepare(`ALTER TABLE experiment_log ADD COLUMN relevance_score INTEGER`).run();
+                this.sqliteDb.prepare(`ALTER TABLE experiment_log ADD COLUMN relevance_score INTEGER NOT NULL DEFAULT 0`).run();
+            }
+            if (!hasArticleTitle) {
+                this.sqliteDb.prepare(`ALTER TABLE experiment_log ADD COLUMN article_title TEXT NOT NULL DEFAULT ''`).run();
+            }
+            if (!hasEngagementScore) {
+                this.sqliteDb.prepare(`ALTER TABLE experiment_log ADD COLUMN engagement_score INTEGER NOT NULL DEFAULT 0`).run();
             }
         }
     }
@@ -96,24 +112,24 @@ class ExperimentService {
     public async logExperiment(record: ExperimentRecord): Promise<void> {
         try {
             const { archetype_code, thread_type, is_linkless, slot_hour,
-                source_domain, article_url, seo_keyword, relevance_score, published_at } = record;
+                source_domain, article_url, article_title, seo_keyword, relevance_score, engagement_score, published_at } = record;
 
             if (this.dbType === 'postgres') {
                 await this.pgPool!.query(
                     `INSERT INTO experiment_log
-            (archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, seo_keyword, relevance_score, published_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                    [archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, seo_keyword, relevance_score, published_at]
+            (archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, article_title, seo_keyword, relevance_score, engagement_score, published_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                    [archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, article_title, seo_keyword, relevance_score, engagement_score, published_at]
                 );
             } else {
                 this.sqliteDb!.prepare(
                     `INSERT INTO experiment_log
-            (archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, seo_keyword, relevance_score, published_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                ).run(archetype_code, thread_type, is_linkless ? 1 : 0, slot_hour, source_domain, article_url, seo_keyword, relevance_score, published_at);
+            (archetype_code, thread_type, is_linkless, slot_hour, source_domain, article_url, article_title, seo_keyword, relevance_score, engagement_score, published_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ).run(archetype_code, thread_type, is_linkless ? 1 : 0, slot_hour, source_domain, article_url, article_title, seo_keyword, relevance_score, engagement_score, published_at);
             }
 
-            console.log(`📐 Experiment logged: ${archetype_code} | ${thread_type} | linkless=${is_linkless} | slot=${slot_hour}h`);
+            console.log(`📐 Experiment logged: ${archetype_code} | ${thread_type} | rel=${relevance_score} | eng=${engagement_score} | linkless=${is_linkless} | slot=${slot_hour}h`);
         } catch (error) {
             // Non-fatal: logging failure must never block publishing
             console.error('⚠️ ExperimentService: Failed to log experiment:', error);
