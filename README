@@ -22,6 +22,8 @@ Multi-Source Scraping: Features an abstract CrawlerManager running 6 custom, ant
 
 Pre-Publish Guardrails: Strict character-limit validation ensures all posts adhere to length limits, automatically utilizing AI to condense long text before failing over to human intervention.
 
+Experiment Logging & Measurement Layer: Logs article relevance, engagement score, and publishing decisions to support iterative content selection.
+
 ## 🏗️ System Architecture
 
 The project is divided into three highly decoupled, containerized services:
@@ -158,5 +160,7 @@ If "Take Control" is clicked: The frontend sends a kill switch command to the ba
 Public "Widget Mode" (Embeddable UI): The React frontend includes a stealth Widget Mode designed to be embedded securely on public-facing websites (like the MatchingDonors homepage) without exposing the administrative controls.
 
 SEO Optimized: Clicks are tracked via UTM parameters, parsed by the Python GA4 scripts, and fed back into the system to measure engagement.
+
+Experiment Logging: After publishing, the system records archetype, thread type, linkless status, SEO keyword, and article scoring for later analysis.
 
 📝 License: This project was developed for the MatchingDonors 501(c)(3) organization.
