@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 
 let genAI: GoogleGenAI | null = null;
 
-async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
+export async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
     // LAZY INITIALIZATION: Create the client right before we need it.
     if (!genAI) {
         genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });

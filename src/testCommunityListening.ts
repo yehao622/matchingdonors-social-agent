@@ -1,4 +1,6 @@
+import 'dotenv/config';
 import { LivingDonorsOnlineCrawler } from './services/crawler/LivingDonorsOnlineCrawler.js';
+import { triageCommunityThread } from './services/communityListeningService.js';
 
 async function runDemo() {
     console.log('🔍 Starting LDO Community Listening Demo...');
@@ -17,9 +19,10 @@ async function runDemo() {
         console.log('🧠 Passing to AI Triage...');
 
         // Uncomment this once your communityListeningService function is hooked up!
-        // const triageResult = await triageCommunityThread(articleData.title, articleData.content);
-        // console.log('✅ TRIAGE RESULT:');
-        // console.dir(triageResult, { depth: null, colors: true });
+        const triageResult = await triageCommunityThread(articleData.title, articleData.content || '');
+
+        console.log('✅ TRIAGE RESULT:');
+        console.dir(triageResult, { depth: null, colors: true });
 
     } catch (error) {
         console.error('❌ Error during demo:', error);
