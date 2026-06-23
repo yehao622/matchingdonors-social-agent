@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import readline from 'readline';
+import { exec } from 'child_process';
 
 const QUEUE_FILE_PATH = path.resolve(process.cwd(), 'triage_queue.json');
 
@@ -14,6 +15,36 @@ const rl = readline.createInterface({
 const askQuestion = (query: string): Promise<string> => {
     return new Promise((resolve) => rl.question(query, resolve));
 };
+
+// Copies text to the system clipboard using native Linux utilities
+function copyToClipboard(text: string): Promise<void> {
+    return new Promise((resolve) => {
+        // Try wl-copy (Wayland) first, fall back to xclip (X11)
+        const command = process.env.XDG_SESSION_TYPE === 'wayland'
+            ? `echo ${JSON.stringify(text)} | wl-copy`
+            : `echo ${JSON.stringify(text)} | xclip -selection clipboard`;
+
+        exec(command, (error) => {
+            if (error) {
+                console.error('⚠️ Failed to copy to clipboard automatically.');
+            } else {
+                console.log('📋 Draft reply copied to clipboard!');
+            }
+            resolve();
+        });
+    });
+}
+
+// Opens a URL in the default system web browser
+function openInBrowser(url: string) {
+    exec(`xdg-open "${url}"`, (error) => {
+        if (error) {
+            console.error('⚠️ Failed to open URL automatically.');
+        } else {
+            console.log('🌐 Thread opened in default browser.');
+        }
+    });
+}
 
 async function reviewTriageQueue() {
     console.log('🔍 Loading Triage Queue for Human Review...\n');
@@ -59,7 +90,10 @@ async function reviewTriageQueue() {
             const choice = answer.trim().toLowerCase();
 
             if (choice === 'a') {
-                console.log('✅ Approved! Saving for publish pipeline.');
+                console.log('✅ Approved!');
+                // Trigger the Clipboard MVP automation
+                await copyToClipboard(item.triage?.draft_reply || '');
+                openInBrowser(item.thread.url);
                 approvedItems.push(item);
                 reviewedCount++;
                 validResponse = true;
