@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import readline from 'readline';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 
 const QUEUE_FILE_PATH = path.resolve(process.cwd(), 'triage_queue.json');
 
@@ -19,17 +19,28 @@ const askQuestion = (query: string): Promise<string> => {
 // Copies text to the system clipboard using native Linux utilities
 function copyToClipboard(text: string): Promise<void> {
     return new Promise((resolve) => {
-        // Try wl-copy (Wayland) first, fall back to xclip (X11)
-        const command = process.env.XDG_SESSION_TYPE === 'wayland'
-            ? `echo ${JSON.stringify(text)} | wl-copy`
-            : `echo ${JSON.stringify(text)} | xclip -selection clipboard`;
+        const isWayland = process.env.XDG_SESSION_TYPE === 'wayland';
+        const command = isWayland ? 'wl-copy' : 'xclip';
+        const args = isWayland ? [] : ['-selection', 'clipboard'];
 
-        exec(command, (error) => {
-            if (error) {
-                console.error('⚠️ Failed to copy to clipboard automatically.');
+        // Spawn the native clipboard process
+        const child = spawn(command, args);
+
+        // Stream the text directly into the process, avoiding shell injection/parsing bugs
+        child.stdin.write(text);
+        child.stdin.end();
+
+        child.on('close', (code) => {
+            if (code !== 0) {
+                console.error(`⚠️ Failed to copy to clipboard (Exit code: ${code}).`);
             } else {
                 console.log('📋 Draft reply copied to clipboard!');
             }
+            resolve();
+        });
+
+        child.on('error', (err) => {
+            console.error(`⚠️ Missing clipboard utility. Ensure ${command} is installed.`, err.message);
             resolve();
         });
     });

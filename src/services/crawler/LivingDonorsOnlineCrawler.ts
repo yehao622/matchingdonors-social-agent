@@ -3,7 +3,7 @@ import { BaseCrawler, ScrapedArticle } from './BaseCrawler.js';
 export class LivingDonorsOnlineCrawler extends BaseCrawler {
     constructor() {
         // Target a specific active board, e.g., "Living Donors" general discussion
-        super('https://livingdonorsonline.org/ldosmf/index.php?board=2.0');
+        super('https://livingdonorsonline.org/ldosmf/index.php?board=3.0');
     }
 
     extractArticleLinks(html: string): string[] {
@@ -53,9 +53,13 @@ export class LivingDonorsOnlineCrawler extends BaseCrawler {
         const links = await this.crawlIndex();
         if (links.length === 0) throw new Error('No threads found on LDO.');
 
-        // Pick top 5 most recent threads, shuffle, pick one (demo behavior)
-        const recentLinks = links.slice(0, 5);
-        const randomLink = recentLinks[Math.floor(Math.random() * recentLinks.length)];
+        // Grab the next 15 links, which represent the actual organic user discussions.
+        const organicLinks = links.slice(5, 20);
+
+        // Safety check just in case the board is empty or heavily pruned
+        const poolToUse = organicLinks.length > 0 ? organicLinks : links;
+
+        const randomLink = poolToUse[Math.floor(Math.random() * poolToUse.length)];
 
         // Safety check to satisfy noUncheckedIndexedAccess in tsconfig
         if (!randomLink) {

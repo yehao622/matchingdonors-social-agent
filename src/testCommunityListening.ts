@@ -4,7 +4,28 @@ import path from 'path';
 import { LivingDonorsOnlineCrawler } from './services/crawler/LivingDonorsOnlineCrawler.js';
 import { triageCommunityThread } from './services/communityListeningService.js';
 
+const HISTORY_FILE_PATH = path.resolve(process.cwd(), 'scraped_history.json');
 const QUEUE_FILE_PATH = path.resolve(process.cwd(), 'triage_queue.json');
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function loadHistory(): Promise<Set<string>> {
+    try {
+        const fileContent = await fs.readFile(HISTORY_FILE_PATH, 'utf-8');
+        const urls = JSON.parse(fileContent);
+        return new Set(urls);
+    } catch (error: any) {
+        if (error.code === 'ENOENT') {
+            return new Set(); // Return empty set if file doesn't exist yet
+        }
+        throw error;
+    }
+}
+
+async function saveHistory(history: Set<string>): Promise<void> {
+    const urlArray = Array.from(history);
+    await fs.writeFile(HISTORY_FILE_PATH, JSON.stringify(urlArray, null, 2), 'utf-8');
+}
 
 async function saveToQueue(threadData: any, triageData: any) {
     let queue: any[] = [];
@@ -42,20 +63,46 @@ async function runDemo() {
     console.log('🔍 Starting LDO Community Listening Demo...');
 
     try {
+        // Load the history of seen URLs
+        const seenUrls = await loadHistory();
+        console.log(`📂 Loaded ${seenUrls.size} previously processed URLs from history.`);
+
         const crawler = new LivingDonorsOnlineCrawler();
-        console.log('📡 Fetching a recent thread...');
-        const articleData = await crawler.crawlRandomArticle();
+        let foundNewThread = false;
+        let attempts = 0;
+        const maxAttempts = 15;
 
-        console.log(`📑 FOUND THREAD: ${articleData.title}`);
-        console.log('🧠 Passing to AI Triage...');
+        while (!foundNewThread && attempts < maxAttempts) {
+            attempts++;
+            console.log(`\n📡 Fetching a recent thread (Attempt ${attempts}/${maxAttempts})...`);
+            const articleData = await crawler.crawlRandomArticle();
 
-        // Uncomment this once your communityListeningService function is hooked up!
-        const triageResult = await triageCommunityThread(articleData.title, articleData.content || '');
+            if (seenUrls.has(articleData.url)) {
+                console.log(`⏭️ Already processed thread: "${articleData.title}".`);
+                console.log('⏳ Retrying in 2 seconds to find a fresh thread...');
+                await delay(2000); // Be polite to the forum server
+                continue; // Skip the rest of the loop and start the next attempt
+            }
 
-        console.log('✅ TRIAGE RESULT:');
-        console.dir(triageResult, { depth: null, colors: true });
+            // If the code reaches here, we successfully found a new thread!
+            foundNewThread = true;
+            console.log(`📑 FOUND NEW THREAD: ${articleData.title}`);
+            console.log('🧠 Passing to AI Triage...');
 
-        await saveToQueue(articleData, triageResult);
+            const triageResult = await triageCommunityThread(articleData.title, articleData.content || '');
+
+            console.log('✅ TRIAGE RESULT:');
+            console.dir(triageResult, { depth: null, colors: true });
+
+            await saveToQueue(articleData, triageResult);
+
+            seenUrls.add(articleData.url);
+            await saveHistory(seenUrls);
+        }
+
+        if (!foundNewThread) {
+            console.log('\n🛑 Reached maximum retry attempts without finding a new thread. Try again later.');
+        }
     } catch (error) {
         console.error('❌ Error during demo:', error);
     }
