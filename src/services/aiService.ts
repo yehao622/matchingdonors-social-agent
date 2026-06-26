@@ -2,13 +2,18 @@ import { GoogleGenAI } from '@google/genai';
 
 let genAI: GoogleGenAI | null = null;
 
-export async function askGemini(prompt: string, maxRetries = 3): Promise<string> {
+// Local Fallback Configuration
+const OLLAMA_URL = 'http://localhost:11434/api/generate';
+const LOCAL_MODEL = 'llama3.1:8b';
+
+export async function askGemini(prompt: string, maxRetries = 3, isJsonMode = false): Promise<string> {
     // LAZY INITIALIZATION: Create the client right before we need it.
     if (!genAI) {
         genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
     }
 
     let delayMs = 5000; // Start with a 5-second wait
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             const response = await genAI.models.generateContent({
@@ -17,20 +22,49 @@ export async function askGemini(prompt: string, maxRetries = 3): Promise<string>
             });
             return response.text || '';
         } catch (error: any) {
-            const isOverloaded = error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('high demand');
+            const isOverloaded = error?.status === 503 || error?.status === 429 ||
+                error?.message?.includes('503') || error?.message?.includes('429') ||
+                error?.message?.includes('high demand') || error?.message?.includes('quota');
 
             if (isOverloaded && attempt < maxRetries) {
                 console.warn(`⚠️ Gemini API Overloaded (503). Retrying in ${delayMs / 1000}s... (Attempt ${attempt} of ${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
                 delayMs *= 2; // Double the wait time for the next attempt (5s -> 10s -> 20s)
+            } else if (isOverloaded && attempt === maxRetries) {
+                console.warn(`🔄 Gemini exhausted after ${maxRetries} attempts. Falling back to local Ollama...`);
+                break;
             } else {
-                // If it's a different error (like a bad API key), or we ran out of retries, throw it to the main Cron loop.
+                // Only throw the error if it's NOT a rate limit (e.g., bad API key)
                 throw error;
             }
         }
     }
 
-    return '';
+    // Phase 2: Local Ollama Fallback
+    try {
+        // We use native fetch (available in Node 18+) to hit the local Ollama port
+        const response = await fetch(OLLAMA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: LOCAL_MODEL,
+                prompt: prompt,
+                stream: false,
+                format: isJsonMode ? 'json' : undefined // Forces Llama to output strict JSON if required
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Ollama API returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response || '';
+
+    } catch (error) {
+        console.error('❌ Both Gemini and Local Ollama failed.', error);
+        return ''; // Return empty string to fail gracefully
+    }
 }
 
 export async function generateInitialDraft(
@@ -76,7 +110,7 @@ export async function generateInitialDraft(
         Do not write anything outside the JSON array block.
     `;
 
-    let text = await askGemini(prompt);
+    let text = await askGemini(prompt, 3, true);
 
     try {
         const start = text.indexOf('[');
@@ -112,6 +146,6 @@ export async function condensePost(originalPost: string, userNote: string): Prom
         OUTPUT ONLY THE NEW TEXT STRING. No markdown, no quotes, no extra text.
     `;
 
-    const text = await askGemini(prompt);
+    const text = await askGemini(prompt, 3, false);
     return text.trim() || null;
 }

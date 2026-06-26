@@ -33,7 +33,7 @@ Output ONLY a raw JSON object matching this exact schema (no markdown formatting
 
     try {
         // Use the newly exported askGemini function
-        const aiResponse = await askGemini(prompt);
+        const aiResponse = await askGemini(prompt, 3, true);
 
         // Clean up the response in case the AI added markdown backticks (e.g., \`\`\`json)
         const cleanJsonString = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();

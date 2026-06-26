@@ -1,8 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import readline from 'readline';
-import { exec, spawn } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execAsync = promisify(exec);
 const QUEUE_FILE_PATH = path.resolve(process.cwd(), 'triage_queue.json');
 
 // Set up the readline interface for CLI interaction
@@ -17,33 +19,28 @@ const askQuestion = (query: string): Promise<string> => {
 };
 
 // Copies text to the system clipboard using native Linux utilities
-function copyToClipboard(text: string): Promise<void> {
-    return new Promise((resolve) => {
+async function copyToClipboard(text: string): Promise<void> {
+    const TEMP_FILE = path.resolve(process.cwd(), '.clipboard_tmp.txt');
+
+    try {
+        await fs.writeFile(TEMP_FILE, text, 'utf-8');
         const isWayland = process.env.XDG_SESSION_TYPE === 'wayland';
-        const command = isWayland ? 'wl-copy' : 'xclip';
-        const args = isWayland ? [] : ['-selection', 'clipboard'];
 
-        // Spawn the native clipboard process
-        const child = spawn(command, args);
+        // Tell the utility to read the file, and redirect output to /dev/null
+        // so it immediately detaches from our Node process
+        const command = isWayland
+            ? `wl-copy < "${TEMP_FILE}" > /dev/null 2>&1`
+            : `xclip -selection clipboard -in < "${TEMP_FILE}" > /dev/null 2>&1`;
 
-        // Stream the text directly into the process, avoiding shell injection/parsing bugs
-        child.stdin.write(text);
-        child.stdin.end();
+        // Execute the command asynchronously
+        await execAsync(command);
+        console.log('📋 Draft reply copied to clipboard!');
 
-        child.on('close', (code) => {
-            if (code !== 0) {
-                console.error(`⚠️ Failed to copy to clipboard (Exit code: ${code}).`);
-            } else {
-                console.log('📋 Draft reply copied to clipboard!');
-            }
-            resolve();
-        });
-
-        child.on('error', (err) => {
-            console.error(`⚠️ Missing clipboard utility. Ensure ${command} is installed.`, err.message);
-            resolve();
-        });
-    });
+        // Quietly clean up the temporary file
+        await fs.unlink(TEMP_FILE).catch(() => { });
+    } catch (error: any) {
+        console.error(`⚠️ Clipboard error: Ensure xclip or wl-clipboard is installed.`, error.message);
+    }
 }
 
 // Opens a URL in the default system web browser
