@@ -1,11 +1,9 @@
+import { QueueService } from './services/QueueService.js';
+import { QueueItem } from './types.js';
 import fs from 'fs/promises';
 import path from 'path';
 import readline from 'readline';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
-const QUEUE_FILE_PATH = path.resolve(process.cwd(), 'triage_queue.json');
+import { exec, spawnSync } from 'child_process';
 
 // Set up the readline interface for CLI interaction
 const rl = readline.createInterface({
@@ -20,26 +18,24 @@ const askQuestion = (query: string): Promise<string> => {
 
 // Copies text to the system clipboard using native Linux utilities
 async function copyToClipboard(text: string): Promise<void> {
-    const TEMP_FILE = path.resolve(process.cwd(), '.clipboard_tmp.txt');
+    const isWayland = process.env.XDG_SESSION_TYPE === 'wayland';
+    const command = isWayland ? 'wl-copy' : 'xclip';
+    const args = isWayland ? [] : ['-selection', 'clipboard'];
 
     try {
-        await fs.writeFile(TEMP_FILE, text, 'utf-8');
-        const isWayland = process.env.XDG_SESSION_TYPE === 'wayland';
+        const result = spawnSync(command, args, {
+            input: text,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'ignore', 'ignore']
+        });
 
-        // Tell the utility to read the file, and redirect output to /dev/null
-        // so it immediately detaches from our Node process
-        const command = isWayland
-            ? `wl-copy < "${TEMP_FILE}" > /dev/null 2>&1`
-            : `xclip -selection clipboard -in < "${TEMP_FILE}" > /dev/null 2>&1`;
-
-        // Execute the command asynchronously
-        await execAsync(command);
-        console.log('📋 Draft reply copied to clipboard!');
-
-        // Quietly clean up the temporary file
-        await fs.unlink(TEMP_FILE).catch(() => { });
+        if (result.error || result.status !== 0) {
+            console.error(`\n⚠️ Clipboard tool missing! Please run: sudo apt install wl-clipboard xclip\n`);
+        } else {
+            console.log('📋 Draft reply copied to clipboard!');
+        }
     } catch (error: any) {
-        console.error(`⚠️ Clipboard error: Ensure xclip or wl-clipboard is installed.`, error.message);
+        console.error(`\n⚠️ Clipboard error. Please run: sudo apt install wl-clipboard xclip\n`);
     }
 }
 
@@ -57,21 +53,7 @@ function openInBrowser(url: string) {
 async function reviewTriageQueue() {
     console.log('🔍 Loading Triage Queue for Human Review...\n');
 
-    let queue: any[] = [];
-
-    try {
-        const fileContent = await fs.readFile(QUEUE_FILE_PATH, 'utf-8');
-        queue = JSON.parse(fileContent);
-    } catch (error: any) {
-        if (error.code === 'ENOENT') {
-            console.log('✅ Queue file not found. Nothing to review!');
-            rl.close();
-            return;
-        }
-        console.error('⚠️ Error reading queue file:', error);
-        rl.close();
-        return;
-    }
+    let queue: QueueItem[] = await QueueService.loadQueue();
 
     if (queue.length === 0) {
         console.log('✅ Queue is empty! You are all caught up.');
@@ -88,9 +70,12 @@ async function reviewTriageQueue() {
         console.log(`📑 SOURCE THREAD: ${item.thread.title}`);
         console.log(`🔗 URL: ${item.thread.url}`);
         console.log(`🎭 AI SENTIMENT: ${item.triage?.sentiment || 'N/A'}`);
-        console.log(`📌 AI TOPIC: ${item.triage?.primary_topic || 'N/A'}`);
-        console.log(`\n🤖 AI DRAFT REPLY:\n"${item.triage?.draft_reply || 'No draft generated'}"`);
+        console.log(`📌 AI TOPIC: ${item.triage?.primaryTopic || 'N/A'}`);
+        console.log(`\n🤖 AI DRAFT REPLY:\n"${item.triage?.draftWarmReply || 'No draft generated'}"`);
         console.log('==================================================\n');
+
+        const draftText = item.triage?.draftWarmReply;
+        const displayDraft = draftText ? draftText : 'No draft generated (Informational post)';
 
         let validResponse = false;
         while (!validResponse) {
@@ -99,8 +84,8 @@ async function reviewTriageQueue() {
 
             if (choice === 'a') {
                 console.log('✅ Approved!');
-                // Trigger the Clipboard MVP automation
-                await copyToClipboard(item.triage?.draft_reply || '');
+                const textToCopy = draftText ? draftText : 'No AI draft needed. Write custom reply here.';
+                await copyToClipboard(textToCopy);
                 openInBrowser(item.thread.url);
                 approvedItems.push(item);
                 reviewedCount++;
@@ -131,13 +116,13 @@ async function reviewTriageQueue() {
         console.log('\n');
     }
 
-    // Write the unprocessed/skipped items back to the queue
-    await fs.writeFile(QUEUE_FILE_PATH, JSON.stringify(remainingQueue, null, 2), 'utf-8');
+    // USE THE SERVICE TO UPDATE (Properly scoped inside the function!)
+    await QueueService.updateQueue(remainingQueue);
 
     // Optional: Save approved items to a separate file (e.g., ready_to_publish.json)
     if (approvedItems.length > 0) {
         const APPROVED_FILE_PATH = path.resolve(process.cwd(), 'ready_to_publish.json');
-        let existingApproved: any[] = [];
+        let existingApproved: QueueItem[] = [];
         try {
             const approvedContent = await fs.readFile(APPROVED_FILE_PATH, 'utf-8');
             existingApproved = JSON.parse(approvedContent);
