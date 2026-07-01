@@ -3,7 +3,12 @@ import { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
 
-export type BanditActionKey = 'thread_linked' | 'single_linkless';
+export type BanditActionKey =
+    | 'empathetic_thread'
+    | 'clinical_thread'
+    | 'urgent_thread'
+    | 'story_thread';
+
 export type RewardStatus = 'pending' | 'resolved';
 
 export interface BanditContextInput {
@@ -53,8 +58,10 @@ class BanditService {
     private readonly rewardReviewFilePath = path.join(process.cwd(), 'data', 'bandit_reward_reviews.json');
 
     private readonly actionCatalog: readonly BanditActionKey[] = [
-        'thread_linked',
-        'single_linkless'
+        'empathetic_thread',
+        'clinical_thread',
+        'urgent_thread',
+        'story_thread'
     ];
 
     constructor() {
@@ -240,18 +247,43 @@ class BanditService {
     }
 
     private async computeRewardForPendingRow(row: PendingBanditRecord): Promise<number | null> {
-        const reviews = this.readManualRewardReviews();
-        const matched = reviews.find((review) => review.article_url === row.article_url);
-
-        if (!matched) {
+        const queueFilePath = path.join(process.cwd(), 'triage_queue.json');
+        if (!fs.existsSync(queueFilePath)) {
             return null;
         }
 
-        if (matched.reward !== 0 && matched.reward !== 1) {
+        try {
+            const rawQueue = fs.readFileSync(queueFilePath, 'utf-8');
+            const queueItems = JSON.parse(rawQueue) as any[];
+
+            // Find any triage items associated with this specific article URL
+            const matchedItems = queueItems.filter(item =>
+                item.thread && item.thread.url && item.thread.url.includes(row.article_url)
+            );
+
+            if (matchedItems.length === 0) {
+                // No forum or social replies detected yet
+                return null;
+            }
+
+            // Calculate reward based on triage sentiment or human approval
+            let totalReward = 0;
+
+            for (const item of matchedItems) {
+                const sentiment = item.triage?.sentiment?.toLowerCase();
+
+                // Reward the AI for generating engaging conversation!
+                if (sentiment === 'sharing' || sentiment === 'positive') {
+                    totalReward += 1;
+                }
+            }
+
+            // Cap the micro-conversion reward at 1 for the Bernoulli Bandit
+            return totalReward > 0 ? 1 : 0;
+        } catch (error) {
+            console.error('⚠️ BanditService: Failed to parse triage queue for rewards:', error);
             return null;
         }
-
-        return matched.reward;
     }
 
     private async getPendingRowsReadyForResolution(): Promise<PendingBanditRecord[]> {
@@ -319,16 +351,20 @@ class BanditService {
     }
 
     public getActionExecutionPlan(actionKey: BanditActionKey): {
+        toneArchetype: string;
         forceThread: boolean;
-        forceLinkless: boolean;
     } {
         switch (actionKey) {
-            case 'thread_linked':
-                return { forceThread: true, forceLinkless: false };
-            case 'single_linkless':
-                return { forceThread: false, forceLinkless: true };
+            case 'empathetic_thread':
+                return { toneArchetype: 'empathetic', forceThread: true };
+            case 'clinical_thread':
+                return { toneArchetype: 'clinical', forceThread: true };
+            case 'urgent_thread':
+                return { toneArchetype: 'urgent', forceThread: true };
+            case 'story_thread':
+                return { toneArchetype: 'story', forceThread: true };
             default:
-                return { forceThread: true, forceLinkless: false };
+                return { toneArchetype: 'empathetic', forceThread: true };
         }
     }
 
